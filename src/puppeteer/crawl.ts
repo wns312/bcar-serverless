@@ -1,6 +1,23 @@
 
 import { PuppeteerNode } from 'puppeteer-core';
+
 async function test() {
+
+  // const client = new DynamoClient('ap-northeast-1')
+  // const tableName = process.env.TEST_TABLE!
+  // const tables = await client.describeTable(tableName)
+  // console.log(tables.Table?.AttributeDefinitions);
+  // console.log(tables.Table?.KeySchema);
+  
+  // const putRes = await client.putItem(tableName, {
+  //   userId: { S: "testId2"}
+  // })
+  // console.log(putRes);
+  // const scanRes = await client.scanItems(tableName)
+  // console.log(scanRes.Items);
+  
+  // return 
+
   const chromium = require("chrome-aws-lambda");
   const puppeteer: PuppeteerNode = chromium.puppeteer
   const browser = await puppeteer.launch({
@@ -49,8 +66,8 @@ async function test() {
           })
       )
   }
-  console.log(carInfoKeys);
-  console.log(carInfoValues);
+  console.log(await Promise.all(carInfoKeys));
+  console.log(await Promise.all(carInfoValues));
   console.log(carCheckSrc);
   console.log(carImgList);
   

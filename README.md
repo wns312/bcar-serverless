@@ -4,13 +4,22 @@
 - [x] First deploy
 - [x] Apply Typescript
 - [x] Apply Puppeteer
-- [ ] Connect DB (maybe DynamoDB)
-- [ ] Connect S3
+- [x] Connect DB (maybe DynamoDB)
+- [ ] Find the way how to join dynamodb tables
+- [ ] Database Design
 - [ ] Implements
+  - [ ] Login into target crawl page
+  - [ ] Crawl single data successfully
+  - [ ] Crawl multiple datas asynchronously
+  - [ ] Save into Table
+  - [ ] Select datas with join
+  - [ ] Save target upload page's accounts
+  - [ ] ...more
 
 ## Packages
 - chrome-aws-lambda: 10.1.0
 - puppeteer-core: 10.4.0
+- @aws-sdk/client-dynamodb
 ### Dev Packages
 - typescript
 - serverless-plugin-typescript
