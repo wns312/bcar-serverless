@@ -5,16 +5,17 @@
 - [x] Apply Typescript
 - [x] Apply Puppeteer
 - [x] Connect DB (maybe DynamoDB)
-- [ ] Find the way how to join dynamodb tables
-- [ ] Database Design
-- [ ] Implements
-  - [ ] Login into target crawl page
-  - [ ] Crawl single data successfully
-  - [ ] Crawl multiple datas asynchronously
-  - [ ] Save into Table
-  - [ ] Select datas with join
-  - [ ] Save target upload page's accounts
-  - [ ] ...more
+- [x] Find the way how to join dynamodb tables
+- [x] Database Design
+### Implements
+- [ ] Create DynamoClient with DynamoBaseClient 
+- [ ] Login into target crawl page
+- [ ] Crawl single data successfully
+- [ ] Crawl multiple datas asynchronously
+- [ ] Save into Table
+- [ ] Select datas with join
+- [ ] Save target upload page's accounts
+- [ ] ...more
 
 ## Packages
 - chrome-aws-lambda: 10.1.0

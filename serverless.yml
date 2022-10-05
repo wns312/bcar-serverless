@@ -4,15 +4,17 @@ service: bestcar
 frameworkVersion: '3'
 
 custom:
-  tableName: 'test-table-${sls:stage}'
+  tableName: 'bcar-table-${sls:stage}'
+  indexName: 'bcar-index-${sls:stage}'
 
 provider:
   name: aws
   runtime: nodejs14.x
   region: ap-northeast-1
-  timeout: 60
+  timeout: 29
   environment:
-    TEST_TABLE: ${self:custom.tableName}
+    BCAR_TABLE: ${self:custom.tableName}
+    BCAR_INDEX: ${self:custom.indexName}
 
 functions:
   hello:
@@ -28,16 +30,30 @@ plugins:
 
 resources:
   Resources:
-    usersTable:
+    BCarTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        AttributeDefinitions:
-          - AttributeName: userId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: userId
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
         TableName: ${self:custom.tableName}
+
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+
+        GlobalSecondaryIndexes:
+          - IndexName: ${self:custom.indexName}
+            KeySchema: 
+            - AttributeName: SK
+              KeyType: HASH
+            - AttributeName: PK
+              KeyType: RANGE
+            Projection:
+              ProjectionType: ALL
+
