@@ -1,94 +1,31 @@
 import { PuppeteerNode } from "puppeteer-core";
-import { DynamoBaseClient } from "../db/dynamo/DynamoBaseClient";
-import { DynamoCarClient } from "../db/dynamo/DynamoCarClient";
+import { DynamoClient } from "../db/dynamo/DynamoClient";
 
 async function test() {
-  const client = new DynamoBaseClient("ap-northeast-1");
   const tableName = process.env.BCAR_TABLE!;
   const indexName = process.env.BCAR_INDEX!;
+  const client = new DynamoClient("ap-northeast-1", tableName, indexName);
 
-  const tables = await client.describeTable(tableName);
-  console.log(tables.Table);
-  console.log(tables.Table?.AttributeDefinitions);
-  console.log(tables.Table?.KeySchema);
-  const carClient = new DynamoCarClient("ap-northeast-1");
-  const res = await carClient.getPost(tableName, "5678");
-  const res2 = await carClient.getCar(tableName, "5678");
-  console.log(res.Items);
-  console.log(res2.Items);
-  return;
+  let res = await client.getCar("5678");
+  // console.log(res.Items);
+  // res = await client.getCar("9999")
+  // console.log(res.Items);
+  // res = await client.getUser("JYK")
+  // console.log(res.Items);
+  // res = await client.getPost("5678", "JYK")
+  // console.log(res.Items);
+  // res = await client.getPost("9999", "JYK")
+  // console.log(res.Items);
+  // res = await client.getAllPostOfCar("5678")
+  // console.log(res.Items);
+  // res = await client.getAllPostOfCar("9999");
+  // console.log(res.Items);
+  // res = await client.getAllPostOfUser("JYK")
+  // console.log(res.Items);
+  res = await client.scan();
+  console.log(res);
 
-  // const res1 = await client.QueryItems({
-  //   TableName: tableName,
-  //   KeyConditionExpression: "PK = :p and SK = :s",
-  //   ExpressionAttributeValues: {
-  //     ":p": { S: "#CAR-5678" },
-  //     ":s": { S: "#USER-JYK" },
-  //   },
-  // });
-  // console.log(1);
-  // console.log(res1.Items);
-  // const res3 = await client.QueryItems({
-  //   TableName: tableName,
-  //   IndexName: indexName,
-  //   KeyConditionExpression: "SK = :s",
-  //   ExpressionAttributeValues: {
-  //       ":s": {S: "#USER-JYK"}
-  //   }
-  // })
-  // console.log(res3.Items);
-  //   const putRes = await client.putItem({
-  //     TableName: tableName,
-  //     Item: {
-  //       PK: { S: "#CAR-5678" },
-  //       SK: { S: "#CAR-5678" },
-  //       CarNum: { N: "5678" },
-  //     },
-  //   });
-  //   const putRes2 = await client.putItem({
-  //     TableName: tableName,
-  //     Item: {
-  //       PK: { S: "#CAR-9999" },
-  //       SK: { S: "#CAR-9999" },
-  //       CarNum: { N: "9999" },
-  //     },
-  //   });
-  //   const putRes3 = await client.putItem({
-  //     TableName: tableName,
-  //     Item: {
-  //       PK: { S: "#USER-JYK" },
-  //       SK: { S: "#USER-JYK" },
-  //       Name: { S: "JYK" },
-  //     },
-  //   });
-  //   const putRes4 = await client.putItem({
-  //     TableName: tableName,
-  //     Item: {
-  //       PK: { S: "#CAR-5678" },
-  //       SK: { S: "#USER-JYK" },
-  //       postNum: { S: "Post1" },
-  //     },
-  //   });
-  //   const putRes5 = await client.putItem({
-  //     TableName: tableName,
-  //     Item: {
-  //       PK: { S: "#CAR-9999" },
-  //       SK: { S: "#USER-JYK" },
-  //       postNum: { S: "Post2" },
-  //     },
-  //   });
-  // console.log(putRes);
-  // console.log(putRes2);
-  // console.log(putRes3);
-  // console.log(putRes4);
-  // console.log(putRes5);
-  //   const scanRes = await client.scanItems({
-  //     TableName: tableName,
-  //     FilterExpression: "begins_with(PK, :p)",
-  //     ExpressionAttributeValues: {
-  //       ":p": { S: "#USER" },
-  //     },
-  //   });
+  // return;
 
   //   const chromium = require("chrome-aws-lambda");
   //   const puppeteer: PuppeteerNode = chromium.puppeteer
