@@ -3,9 +3,13 @@ app: bestcar
 service: bestcar
 frameworkVersion: '3'
 
+useDotenv: true
+
 custom:
   tableName: 'bcar-table-${sls:stage}'
   indexName: 'bcar-index-${sls:stage}'
+  dotenv:
+    path: env/.env
 
 provider:
   name: aws
@@ -27,6 +31,7 @@ functions:
 plugins:
   - serverless-plugin-typescript
   - serverless-offline
+  - serverless-dotenv-plugin
 
 resources:
   Resources:
