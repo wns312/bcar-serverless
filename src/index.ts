@@ -1,11 +1,18 @@
 import { APIGatewayEvent, Context } from "aws-lambda";
 import { test } from "./puppeteer/crawl";
+import { CarCrawler } from './puppeteer/crawl'
+import { envs } from './configs'
+
+
+
 exports.hello = async (
   event: APIGatewayEvent,
   context: Context
   // callback: Function
 ) => {
-  await test();
+  const crawler = new CarCrawler(envs)
+  await crawler.crawl()
+  // await test();
   return {
     statusCode: 200,
     body: JSON.stringify(

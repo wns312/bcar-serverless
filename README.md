@@ -8,8 +8,8 @@
 - [x] Find the way how to join dynamodb tables
 - [x] Database Design
 ### Implements
-- [ ] Create DynamoClient with DynamoBaseClient 
-- [ ] Login into target crawl page
+- [x] Create DynamoClient with DynamoBaseClient 
+- [x] Login into target crawl page
 - [ ] Crawl single data successfully
 - [ ] Crawl multiple datas asynchronously
 - [ ] Save into Table
