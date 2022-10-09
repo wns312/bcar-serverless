@@ -1,4 +1,4 @@
-import { Page, PuppeteerNode } from "puppeteer-core";
+import { Browser, Page, PuppeteerNode } from "puppeteer-core";
 import { DynamoClient } from "../db/dynamo/DynamoClient";
 import { envs } from '../configs'
 
@@ -15,7 +15,8 @@ export class CarCrawler {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath,
-      headless: chromium.headless
+      headless: true
+      // headless: chromium.headless
     });
   }
 
@@ -70,6 +71,7 @@ export class CarCrawler {
 
   // a 태그의 href값을 원하는 페이지값으로 변경 후 클릭한다.
   private async movePage(page: Page, pageNum: number) {
+
     await page.evaluate((pageNum) => {
       const element = document.querySelector('#paging > a:nth-child(1)')!
       element.setAttribute('href', `javascript:changePagenum(${pageNum});`)
@@ -78,23 +80,95 @@ export class CarCrawler {
     await page.click('#paging > a:nth-child(1)');
   }
 
+  private async getCarDetail(browser: Browser, manageNum: number) {
+    const { BCAR_DETAIL_PAGE_TEMPLATE } = this.envs
+    const page = await browser.newPage();
+    await page.goto(`${BCAR_DETAIL_PAGE_TEMPLATE}${manageNum}`, { waitUntil: 'load' })
+    let data_len = await page.$$eval( "#detail_box > div.right > div > div.carContTop > ul > li", data => {
+        return data.length;
+    });
+
+    // 차 정보 가져오는 부분
+    let carInfoKeys = []
+    let carInfoValues = []
+    for (let index = 1; index < data_len+1; index++) {
+        carInfoKeys.push(
+            page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.tit`, (data)=>{
+                return data.textContent ? data.textContent.trim() : ''
+            })
+        )
+        carInfoValues.push(
+            page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.txt`, (data)=>{
+                return data.textContent ? data.textContent.trim() : ''
+            })
+        )
+    }
+    const carCheckSrc = await page.$eval(`#detail_box > div:nth-child(21) > iframe`, (element)=>{
+        return element.getAttribute('src')
+    })
+
+    // 이미지만 가져오기
+    const imgLen = await page.$$eval(`#detail_box > div:nth-child(16) > a`, (element)=>{
+        return element.length
+    })
+    let carImgList = []
+    for (let index = 1; index < imgLen+1; index++) {
+        carImgList.push(
+            page.$eval(`#detail_box > div:nth-child(16) > a:nth-child(${index}) > img`, (element)=>{
+                return element.getAttribute('src')
+            })
+        )
+    }
+    carInfoKeys = await Promise.all(carInfoKeys)
+    carInfoValues = await Promise.all(carInfoValues)
+    carImgList = await Promise.all(carImgList)
+    const carInfoMap = new Map<string, string>()
+    for (let i = 0; i < data_len; i++) {
+      carInfoMap.set(carInfoKeys[i], carInfoValues[i])
+    }
+    return {
+      carInfoMap,
+      carCheckSrc,
+      carImgList
+    }
+  }
+
   // 진입 method
   async crawl() {
     const browser = await this.getBrowser()
     const [page] = await browser.pages();
 
-    await this.login(page)
-    await this.selectCarsWithMaxPrice(page, 2000)
+    // await this.login(page)
+    // await page.waitForTimeout(3000);
+    // await this.selectCarsWithMaxPrice(page, 2000)
 
-
-    const carObjects = await this.getPagesCarObjects(page)
+    // await page.waitForTimeout(3000);
+    // const carObjects = await this.getPagesCarObjects(page)
     // console.log(carObjects);
     // carNum이 이미 database 안에 있다면 filter한다. (왜냐면 새로 데이터를 생성 할 필요가 없기 때문이다.)
     // filter가 끝났다면 페이지 number를 따로 저장해두고 다음 페이지로 이동해 다음 페이지의 데이터를 수집한다.
     // 모든 페이지의 수집이 완료될때까지 반복한다.
     // 전체 페이지 수를 가져오려면 판매중 차량의 개수 // 100으로 나누면 됨.
-    await this.movePage(page, 121)
+    // await this.movePage(page, 121)
+    const startTime = Date.now()
+    const mNoList = [8745253, 8820254, 8820255, 8745260, 8745258, 8820241, 8745248, 8820258, 8745249, 8820242, 8820259, 8745261]
+    let res = mNoList.map(mNo=>{
+      return this.getCarDetail(browser, mNo)
+    })
+    const responses = await Promise.all(res)
+    const endTime = Date.now()
+    console.log(responses);
+    console.log(endTime - startTime);
+    // 하나의 차량 긁어오는데 1초정도 걸린다.
+    // 초기에는 약 12000대의 차량을 모두 긁어오는데 30분 이상 걸리지만,
+    // 한번 모든 차량을 등록한 이후에는
+    // 1. 로그인 후 120페이지에 달하는 모든 리스트에서 관리번호를 긁어온 후, 없는 녀석만 추가하면 되기 때문에
+    // 2. 120초 + 없는 차량이 하루 100대라고 가정했을 때 100초 = 220초이므로, 약 4~5분이면 모든 차량을 업데이트 할 수 있게 된다.
+    // 3. 하루 5분이면 모든 차량을 DB에 넣고 있기 충분함
+    // 4. 판매된 차량을 제거하는건 천천히 하자..힘들다...
     
+    
+    // await browser.close()
     // setTimeout(async () => {
     //   await page.select('select[name="c_price2"]', '2000');
     //   await page.click('input[value="검색"]')
@@ -125,66 +199,3 @@ export class CarCrawler {
     throw new Error("Not implemented")
   }
 }
-async function test() {
-    // 사실 이 페이지에서는 조작을 안해도 됨
-    // 상세페이지에서만 조작을 잘하면 됨
-    // update 시간을 지정해서 해당하지 않는 녀석들을 다 판매 완료로 변경하는 것도 고려할 수 있을 듯
-    // 이제 상세페이지에서 가격을 가져오는 연습을 해야됨
-    // 시간이 얼마나 걸릴지는 모르겠음
-    // 모든것의 상세페이지를 접근해서 가져오는 것보다는, 차량의 목록을 DB와 대조해서 올라가지 않은 녀석들만 잘 계산하는 방법을 쓰면 될 것 같다.
-
-    // await setTimeout(async () => {
-    //   await browser.close();
-    // }, 5000);
-    // 추가 탭을 많이 여는 과정
-    // const pages = []
-    // for (let i = 0; i < 10; i++) {
-    //   const newPage = await browser.newPage();
-    //   pages.push(newPage.goto(process.env.BCAR_ADMIN_MAIN_PAGE!, { waitUntil: 'load' }))
-    // }
-    // await Promise.all(pages)
-
-  //   let data_len = await page.$$eval( "#detail_box > div.right > div > div.carContTop > ul > li", data => {
-  //       return data.length;
-  //   });
-
-  //   // 차 정보 가져오는 부분
-  //   let carInfoKeys = []
-  //   let carInfoValues = []
-  //   for (let index = 1; index < data_len+1; index++) {
-  //       carInfoKeys.push(
-  //           page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.tit`, (data)=>{
-  //               return data.textContent
-  //           })
-  //       )
-  //       carInfoValues.push(
-  //           page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.txt`, (data)=>{
-  //               return data.textContent ? data.textContent.trim() : ''
-  //           })
-  //       )
-  //   }
-  //   const carCheckSrc = await page.$eval(`#detail_box > div:nth-child(21) > iframe`, (element)=>{
-  //       return element.getAttribute('src')
-  //   })
-
-  //   // 이미지만 가져오기
-  //   const imgLen = await page.$$eval(`#detail_box > div:nth-child(16) > a`, (element)=>{
-  //       return element.length
-  //   })
-  //   const carImgList = []
-  //   for (let index = 1; index < imgLen+1; index++) {
-  //       carImgList.push(
-  //           await page.$eval(`#detail_box > div:nth-child(16) > a:nth-child(${index}) > img`, (element)=>{
-  //               return element.getAttribute('src')
-  //           })
-  //       )
-  //   }
-  //   console.log(await Promise.all(carInfoKeys));
-  //   console.log(await Promise.all(carInfoValues));
-  //   console.log(carCheckSrc);
-  //   console.log(carImgList);
-
-
-}
-
-export { test };
