@@ -246,7 +246,9 @@ export class CarCrawler {
     return carObjects
   }
 
-  async crawlCarList(browserSize: number) {
+  async crawlCarList() {
+    const { CRAWL_BROWSER_SIZE } = this.envs
+    const browserSize = parseInt(CRAWL_BROWSER_SIZE)
     const { browsers, pages } = await this.createInitializedBrowsers(browserSize)
     const pageAmount = await this.getCarPages(pages[0])
 

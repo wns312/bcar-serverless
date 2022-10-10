@@ -8,6 +8,7 @@ const envs = {
     ADMIN_PW: process.env.ADMIN_PW!,
     DYNAMO_DB_REGION: process.env.DYNAMO_DB_REGION!,
     BCAR_DETAIL_PAGE_TEMPLATE: process.env.BCAR_DETAIL_PAGE_TEMPLATE!,
+    CRAWL_BROWSER_SIZE: process.env.CRAWL_BROWSER_SIZE!
 }
 if (!Object.values(envs).every(env => env)) {
 throw new Error('sddssds')

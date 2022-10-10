@@ -10,8 +10,10 @@
 ### Implements
 - [x] Create DynamoClient with DynamoBaseClient 
 - [x] Login into target crawl page
-- [ ] Crawl single data successfully
-- [ ] Crawl multiple datas asynchronously
+- [x] Crawl car list asynchronously
+- [x] Crawl single data successfully
+- [ ] Crawl detail list asynchronously
+- [ ] Create compare logic which should be saved & deleted from (DB, target pages)
 - [ ] Save into Table
 - [ ] Select datas with join
 - [ ] Save target upload page's accounts
