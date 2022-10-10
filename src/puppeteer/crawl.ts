@@ -4,7 +4,7 @@ import { envs } from '../configs'
 
 type Environments = typeof envs
 
-
+// TimeoutError
 export class CarCrawler {
   constructor(private envs: Environments) {}
 
@@ -15,8 +15,8 @@ export class CarCrawler {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath,
-      headless: true
-      // headless: chromium.headless
+      // headless: true
+      headless: chromium.headless
     });
   }
 
@@ -28,8 +28,6 @@ export class CarCrawler {
       ADMIN_PW
     } = this.envs
 
-    // const page = await browser.newPage();
-    // waitUntil을 사용해야 로딩이 된다.
     await page.goto(BCAR_ADMIN_LOGIN_PAGE, { waitUntil: 'load' });
     await page.evaluate((id, pw) => {
       const elements = document.getElementsByClassName('iptD')
@@ -38,22 +36,25 @@ export class CarCrawler {
       idInput.setAttribute('value', id)
       pwInput.setAttribute('value', pw)
     }, ADMIN_ID, ADMIN_PW)
-    await page.click('button[class="btn_login"]');
-    await page.waitForNavigation({waitUntil: 'networkidle2'})
+    await Promise.all([
+      page.click('button[class="btn_login"]'),
+      page.waitForNavigation({waitUntil: 'networkidle2'})
+    ]);
+    // await page.waitForTimeout(3000);
   }
 
   // 차량 가격 필터링 중 최대 가격 필터링을 적용 후 페이지를 이동한 뒤 로딩될 때까지 대기한다
   private async selectCarsWithMaxPrice(page: Page, maxPrice: number) {
     await page.select('select[name="c_price2"]', `${maxPrice}`);
     await page.click('input[value="검색"]')
-    await page.waitForSelector('#searchList > table > tbody > tr');
+    await this.waitForSearchList(page)
   }
 
   // 특정 목록 페이지의 차량 번호와 등록 번호를 가져온다.
   private async getPagesCarObjects(page: Page) {
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1)
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1) > span.checkbox > input
-    return await page.$$eval('#searchList > table > tbody > tr', elements => {
+    const result = await page.$$eval('#searchList > table > tbody > tr', elements => {
       return elements.map(ele => {
         const td = ele.getElementsByTagName('td')
         if (td.length) {
@@ -62,11 +63,13 @@ export class CarCrawler {
           const detailPageNum = td.item(0)!.querySelector('span.checkbox > input')!.getAttribute('value')
           return {
             carNum,
-            detailPageNum
+            detailPageNum,
+            // 여기서 원가도 리턴해주어야 함
           }
         }
       })
     })
+    return result
   }
 
   // a 태그의 href값을 원하는 페이지값으로 변경 후 클릭한다.
@@ -76,8 +79,10 @@ export class CarCrawler {
       const element = document.querySelector('#paging > a:nth-child(1)')!
       element.setAttribute('href', `javascript:changePagenum(${pageNum});`)
     }, pageNum)
-
+    // await page.waitForTimeout(3000);
     await page.click('#paging > a:nth-child(1)');
+    // #searchList 의 style display가 none에서 block으로 변하면 리턴하면됨
+    await this.waitForSearchList(page)
   }
 
   private async getCarDetail(browser: Browser, manageNum: number) {
@@ -133,6 +138,50 @@ export class CarCrawler {
     }
   }
 
+  async getCarPages(page: Page) {
+    const carAmount = await page.$eval<string>('#sellOpenCarCount', (ele) => {
+      if (typeof ele.textContent == 'string') {
+        return ele.textContent
+      }
+      throw new Error(`text is not string: ${typeof ele.textContent}`)
+      
+    })
+    return Math.floor( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
+  }
+
+  private async waitForSearchList(page: Page) {
+    let display = 'none'
+    while (display === 'none') {
+      display = await page.$eval('#searchList', ele => {
+        return window.getComputedStyle(ele).getPropertyValue('display')
+      })
+    }
+  }
+  // 진입 method
+  async crawlCarList() {
+
+    const browser = await this.getBrowser()
+    const [page] = await browser.pages();
+    await this.login(page)
+    await this.selectCarsWithMaxPrice(page, 2000)
+
+    const pageAmount = await this.getCarPages(page)
+    // const pageAmount = 10
+    // console.log(pageAmount);
+    const startTime = Date.now()
+    await this.getPagesCarObjects(page)
+    for (let i = 2; i < pageAmount + 1; i++) {
+      console.log(`targetPage before move: ${i}`);
+      await this.movePage(page, i)
+      console.log(`targetPage after move: ${i}`);
+      await this.getPagesCarObjects(page)
+    }
+    const endTime = Date.now()
+    console.log(endTime - startTime);
+    
+    await browser.close()
+  }
+
   // 진입 method
   async crawl() {
     const browser = await this.getBrowser()
@@ -159,6 +208,8 @@ export class CarCrawler {
     const endTime = Date.now()
     console.log(responses);
     console.log(endTime - startTime);
+    // 1차 crawl은 m_no와 차량번호, 원가를 가져오는데까지
+    // 2차 crawl은 detail에 대한 데이터를 가져오는 것이다.
     // 하나의 차량 긁어오는데 1초정도 걸린다.
     // 초기에는 약 12000대의 차량을 모두 긁어오는데 30분 이상 걸리지만,
     // 한번 모든 차량을 등록한 이후에는

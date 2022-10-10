@@ -10,7 +10,7 @@ exports.hello = async (
   // callback: Function
 ) => {
   const crawler = new CarCrawler(envs)
-  await crawler.crawl()
+  await crawler.crawlCarList()
   return {
     statusCode: 200,
     body: JSON.stringify(
