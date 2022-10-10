@@ -4,7 +4,22 @@ import { envs } from '../configs'
 
 type Environments = typeof envs
 
-// TimeoutError
+type CarObject = {
+  carNum: string,
+  detailPageNum: string,
+  price: string
+  // 여기서 원가도 리턴해주어야 함
+}
+
+type RangeChunk = {
+  start: number,
+  end: number
+}
+
+// PageAmountCrawl
+// CarListCrawl
+// CarDetailCrawl로 나누어야 할 것 같음
+
 export class CarCrawler {
   constructor(private envs: Environments) {}
 
@@ -15,8 +30,8 @@ export class CarCrawler {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath,
-      // headless: true
-      headless: chromium.headless
+      headless: true
+      // headless: chromium.headless
     });
   }
 
@@ -51,23 +66,29 @@ export class CarCrawler {
   }
 
   // 특정 목록 페이지의 차량 번호와 등록 번호를 가져온다.
-  private async getPagesCarObjects(page: Page) {
+  private async getPagesCarObjects(page: Page): Promise<CarObject[]> {
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1)
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1) > span.checkbox > input
     const result = await page.$$eval('#searchList > table > tbody > tr', elements => {
+
+
       return elements.map(ele => {
         const td = ele.getElementsByTagName('td')
         if (td.length) {
           const rawCarNum =  td.item(0)!.textContent!
           const carNum = rawCarNum.split('\t').filter(str => ['\n', '', '광고중\n'].includes(str) ? false : true)[0]
-          const detailPageNum = td.item(0)!.querySelector('span.checkbox > input')!.getAttribute('value')
+          const detailPageNum = td.item(0)!.querySelector('span.checkbox > input')!.getAttribute('value')!
+          const price = td.item(6)!.childNodes[0].textContent!.replace(',', '')
           return {
             carNum,
             detailPageNum,
-            // 여기서 원가도 리턴해주어야 함
+            price
           }
         }
-      })
+      }).filter((ele):ele is CarObject=> Boolean(ele))
+
+
+
     })
     return result
   }
@@ -138,7 +159,7 @@ export class CarCrawler {
     }
   }
 
-  async getCarPages(page: Page) {
+  private async getCarPages(page: Page) {
     const carAmount = await page.$eval<string>('#sellOpenCarCount', (ele) => {
       if (typeof ele.textContent == 'string') {
         return ele.textContent
@@ -146,7 +167,7 @@ export class CarCrawler {
       throw new Error(`text is not string: ${typeof ele.textContent}`)
       
     })
-    return Math.floor( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
+    return Math.ceil( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
   }
 
   private async waitForSearchList(page: Page) {
@@ -157,75 +178,100 @@ export class CarCrawler {
       })
     }
   }
-  // 진입 method
-  async crawlCarList() {
 
-    const browser = await this.getBrowser()
-    const [page] = await browser.pages();
-    await this.login(page)
-    await this.selectCarsWithMaxPrice(page, 2000)
-
-    const pageAmount = await this.getCarPages(page)
-    // const pageAmount = 10
-    // console.log(pageAmount);
-    const startTime = Date.now()
-    await this.getPagesCarObjects(page)
-    for (let i = 2; i < pageAmount + 1; i++) {
-      console.log(`targetPage before move: ${i}`);
+  private async crawlRange(page: Page, startPage: number, endPage: number) {
+    let catObjects: CarObject[] = []
+    for (let i = startPage; i < endPage; i++) {
+      // console.log(`targetPage before move: ${i}`);
       await this.movePage(page, i)
       console.log(`targetPage after move: ${i}`);
-      await this.getPagesCarObjects(page)
+      const datas = await this.getPagesCarObjects(page)
+      catObjects = [...catObjects, ...datas]
     }
+    return catObjects
+  }
+
+  private async createInitializedPage() {
+    const browser = await this.getBrowser()
+    const [page] = await browser.pages()
+    await this.login(page)
+    await this.selectCarsWithMaxPrice(page, 2000)
+    return browser
+  }
+
+  private async createInitializedBrowsers(browserSize: number) {
+    const promiseBrowsers: Promise<Browser>[] = []
+    for (let i = 0; i < browserSize; i++) {
+      promiseBrowsers.push(this.createInitializedPage())
+    }
+    const browsers = await Promise.all(promiseBrowsers)
+    const promiseBrowsersPages = browsers.map(browser => browser.pages())
+    const browserPages = await Promise.all(promiseBrowsersPages)
+    const pages = browserPages.map(pages=>pages[0])
+    return {
+      browsers,
+      pages
+    }
+  }
+
+
+  private createRangeChunks(pageAmount: number) {
+    const rangeChunks: RangeChunk[] = []
+    for (let i = 1; i < pageAmount + 1; i = i + 10) {
+      rangeChunks.push({
+        start: i,
+        end: Math.min(i+10, pageAmount)
+      })
+    }
+    return rangeChunks
+  }
+
+  private async asyncCrawl(browserSize: number, rangeChunks: RangeChunk[], pages: Page[]) {
+    let carObjects: CarObject[] = []
+    while (rangeChunks.length) {
+      const endIdx = Math.min(browserSize, rangeChunks.length)
+      const promiseCarObjectsChunks: Promise<CarObject[]>[] = []
+      for (let i = 0; i < endIdx; i++) {
+        const range = rangeChunks.pop()
+        if (range) {
+          const { start, end } = range
+          promiseCarObjectsChunks.push(this.crawlRange(pages[i], start,end))
+        }
+      }
+      const carObjectsChunks = await Promise.all(promiseCarObjectsChunks)
+      for (const carObjectsChunk of carObjectsChunks) {
+        carObjects = [...carObjects, ...carObjectsChunk]
+      }
+    }
+    return carObjects
+  }
+
+  async crawlCarList(browserSize: number) {
+    const { browsers, pages } = await this.createInitializedBrowsers(browserSize)
+    const pageAmount = await this.getCarPages(pages[0])
+
+    const rangeChunks = this.createRangeChunks(pageAmount)
+    console.log(rangeChunks);
+
+    const startTime = Date.now()
+    const carObjects = await this.asyncCrawl(browserSize, rangeChunks, pages)
     const endTime = Date.now()
     console.log(endTime - startTime);
-    
-    await browser.close()
+
+    const closed = browsers.map(browser=>browser.close())
+    await Promise.all(closed)
+
+    return carObjects
   }
 
   // 진입 method
-  async crawl() {
-    const browser = await this.getBrowser()
-    const [page] = await browser.pages();
-
-    // await this.login(page)
-    // await page.waitForTimeout(3000);
-    // await this.selectCarsWithMaxPrice(page, 2000)
-
-    // await page.waitForTimeout(3000);
-    // const carObjects = await this.getPagesCarObjects(page)
-    // console.log(carObjects);
-    // carNum이 이미 database 안에 있다면 filter한다. (왜냐면 새로 데이터를 생성 할 필요가 없기 때문이다.)
-    // filter가 끝났다면 페이지 number를 따로 저장해두고 다음 페이지로 이동해 다음 페이지의 데이터를 수집한다.
-    // 모든 페이지의 수집이 완료될때까지 반복한다.
-    // 전체 페이지 수를 가져오려면 판매중 차량의 개수 // 100으로 나누면 됨.
-    // await this.movePage(page, 121)
-    const startTime = Date.now()
-    const mNoList = [8745253, 8820254, 8820255, 8745260, 8745258, 8820241, 8745248, 8820258, 8745249, 8820242, 8820259, 8745261]
-    let res = mNoList.map(mNo=>{
-      return this.getCarDetail(browser, mNo)
-    })
-    const responses = await Promise.all(res)
-    const endTime = Date.now()
-    console.log(responses);
-    console.log(endTime - startTime);
-    // 1차 crawl은 m_no와 차량번호, 원가를 가져오는데까지
-    // 2차 crawl은 detail에 대한 데이터를 가져오는 것이다.
-    // 하나의 차량 긁어오는데 1초정도 걸린다.
-    // 초기에는 약 12000대의 차량을 모두 긁어오는데 30분 이상 걸리지만,
-    // 한번 모든 차량을 등록한 이후에는
-    // 1. 로그인 후 120페이지에 달하는 모든 리스트에서 관리번호를 긁어온 후, 없는 녀석만 추가하면 되기 때문에
-    // 2. 120초 + 없는 차량이 하루 100대라고 가정했을 때 100초 = 220초이므로, 약 4~5분이면 모든 차량을 업데이트 할 수 있게 된다.
-    // 3. 하루 5분이면 모든 차량을 DB에 넣고 있기 충분함
-    // 4. 판매된 차량을 제거하는건 천천히 하자..힘들다...
+  async crawlTest() {
+    const browser = await this.createInitializedPage()
+    const [page] = await browser.pages()
+    const carObject = await this.crawlRange(page, 1, 2)
+    console.log(carObject);
     
-    
-    // await browser.close()
-    // setTimeout(async () => {
-    //   await page.select('select[name="c_price2"]', '2000');
-    //   await page.click('input[value="검색"]')
-    // }, 3000);
-    // await page.close()
-
+    await browser.close()
     // 결과적으로 진행되어야 하는 순서
     // 1. 로그인 후 2000만원 설정 후 클릭
     // 2. 로딩을 기다린 후 판매중인 대수를 가져와서 몫연산으로 전체 페이지 수를 구한다.

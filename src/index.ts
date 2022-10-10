@@ -8,9 +8,10 @@ exports.hello = async (
   event: APIGatewayEvent,
   context: Context
   // callback: Function
-) => {
+) => {  
   const crawler = new CarCrawler(envs)
-  await crawler.crawlCarList()
+  // await crawler.crawlCarList(1)
+  await crawler.crawlTest()
   return {
     statusCode: 200,
     body: JSON.stringify(
