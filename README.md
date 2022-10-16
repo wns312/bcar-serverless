@@ -12,7 +12,9 @@
 - [x] Login into target crawl page
 - [x] Crawl car list asynchronously
 - [x] Crawl single data successfully
-- [ ] Crawl detail list asynchronously
+- [x] Create new lambda which getting details
+- [x] Invoke detail crawl lambda async
+- [x] Crawl detail list asynchronously (impossible. multi browser raise error)
 - [ ] Create compare logic which should be saved & deleted from (DB, target pages)
 - [ ] Save into Table
 - [ ] Select datas with join

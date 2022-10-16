@@ -15,18 +15,19 @@ provider:
   name: aws
   runtime: nodejs14.x
   region: ap-northeast-1
-  timeout: 29
+
   environment:
     BCAR_TABLE: ${self:custom.tableName}
     BCAR_INDEX: ${self:custom.indexName}
 
 functions:
-  hello:
-    handler: src/index.hello
-    events:
-      - httpApi:
-          path: /
-          method: get
+  manageBCar:
+    timeout: 600
+    memorySize: 2048
+    handler: src/index.manageBCar
+  crawlBCarDetail:
+    timeout: 300
+    handler: src/index.crawlBCarDetail
 
 plugins:
   - serverless-plugin-typescript
@@ -61,4 +62,3 @@ resources:
               KeyType: RANGE
             Projection:
               ProjectionType: ALL
-

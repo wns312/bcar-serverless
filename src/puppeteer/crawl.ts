@@ -4,10 +4,10 @@ import { envs } from '../configs'
 
 type Environments = typeof envs
 
-type CarObject = {
+type CarListObject = {
   carNum: string,
-  detailPageNum: string,
-  price: string
+  detailPageNum: number,
+  price: number
   // 여기서 원가도 리턴해주어야 함
 }
 
@@ -16,26 +16,45 @@ type RangeChunk = {
   end: number
 }
 
-// PageAmountCrawl
-// CarListCrawl
-// CarDetailCrawl로 나누어야 할 것 같음
+// 결과적으로 진행되어야 하는 순서
+// 1. 로그인 후 2000만원 설정 후 클릭
+// 2. 로딩을 기다린 후 판매중인 대수를 가져와서 몫연산으로 전체 페이지 수를 구한다.
+// 3. 전체 페이지 개수를 저장한다.
+// (이 때 처음 탭은 1페이지를 저장하는데 사용하지 않는다. 관심사의 분리를 명확히 하기 위한 것)
+// 4. 이제 각 페이지 수만큼 자손 탭을 생성한다
+// 5. 자손 탭들은 가격 2000만원 설정 후 각 페이지로 이동한다.
+// 6. 각 페이지에서 자손 탭들은 차량번호, 등록번호, 원가를 가져온다.
+// 7. 각 결과값은 리스트에 넣는다.
+// 8. Promise.all()로 전체 데이터를 최종적으로 수집해서 가져온다.
+// 9. 데이터베이스에 저장 후 종료
 
-export class CarCrawler {
-  constructor(private envs: Environments) {}
+// save() {
+//   const {
+//     DYNAMO_DB_REGION,
+//     BCAR_TABLE,
+//     BCAR_INDEX,
+//   } = this.envs
+//   const client = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX);
 
-  private async getBrowser() {
-    const chromium = require("chrome-aws-lambda");
-    const puppeteer: PuppeteerNode = chromium.puppeteer
-    return await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: true
-      // headless: chromium.headless
-    });
+//   throw new Error("Not implemented")
+// }
+
+export class CarListPageWaiter {
+  async waitForSearchList(page: Page) {
+    let display = 'none'
+    while (display === 'none') {
+      display = await page.$eval('#searchList', ele => {
+        return window.getComputedStyle(ele).getPropertyValue('display')
+      })
+    }
   }
+}
 
-  // 로그인 후 로딩을 기다린다.
+export class CarListPageInitializer {
+  constructor(
+    private envs: Environments,
+    private carListPageWaiter: CarListPageWaiter) {}
+
   private async login(page: Page) {
     const {
       BCAR_ADMIN_LOGIN_PAGE,
@@ -62,15 +81,88 @@ export class CarCrawler {
   private async selectCarsWithMaxPrice(page: Page, maxPrice: number) {
     await page.select('select[name="c_price2"]', `${maxPrice}`);
     await page.click('input[value="검색"]')
-    await this.waitForSearchList(page)
+    await this.carListPageWaiter.waitForSearchList(page)
   }
 
+  private async getBrowser() {
+    const chromium = require("chrome-aws-lambda");
+    const puppeteer: PuppeteerNode = chromium.puppeteer
+    return await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      // headless: true
+      headless: chromium.headless
+    });
+  }
+
+  async createInitializedBrowsers() {
+    const browser = await this.getBrowser()
+    const [page] = await browser.pages()
+    await this.login(page)
+    await this.selectCarsWithMaxPrice(page, 2000)
+    
+    return {
+      browser,
+      page
+    }
+  }
+}
+
+
+export class CarPageAmountCrawler {
+  constructor(
+    private carListPageInitializer: CarListPageInitializer,
+    ) {}
+
+  private createRangeChunks(pageAmount: number) {
+    const rangeChunks: RangeChunk[] = []
+    for (let i = 1; i < pageAmount + 1; i = i + 5) {
+      rangeChunks.push({
+        start: i,
+        end: Math.min(i+5, pageAmount)
+      })
+    }
+    return rangeChunks
+  }
+
+  private async getCarPages(page: Page) {
+    const carAmount = await page.$eval<string>('#sellOpenCarCount', (ele) => {
+      if (typeof ele.textContent == 'string') {
+        return ele.textContent
+      }
+      throw new Error(`text is not string: ${typeof ele.textContent}`)
+      
+    })
+    return Math.ceil( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
+  }
+
+  async crawl() {
+    const { browser, page } = await this.carListPageInitializer.createInitializedBrowsers()
+    const pageAmount = await this.getCarPages(page)
+    await browser.close()
+    // TODO: 5개씩 쪼개는 range의 경우 제대로 처리되지 않는다. 확인해볼 것 
+    return pageAmount
+  }
+}
+
+
+
+
+
+export class CarListCralwer {
+
+  constructor(
+    private envs: Environments,
+    private carListPageInitializer: CarListPageInitializer,
+    private carListPageWaiter: CarListPageWaiter
+    ) {}
+
   // 특정 목록 페이지의 차량 번호와 등록 번호를 가져온다.
-  private async getPagesCarObjects(page: Page): Promise<CarObject[]> {
+  private async getCarListObjectsWithPage(page: Page): Promise<CarListObject[]> {
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1)
     // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1) > span.checkbox > input
     const result = await page.$$eval('#searchList > table > tbody > tr', elements => {
-
 
       return elements.map(ele => {
         const td = ele.getElementsByTagName('td')
@@ -81,34 +173,99 @@ export class CarCrawler {
           const price = td.item(6)!.childNodes[0].textContent!.replace(',', '')
           return {
             carNum,
-            detailPageNum,
-            price
+            detailPageNum: parseInt(detailPageNum),
+            price: parseInt(price)
           }
         }
-      }).filter((ele):ele is CarObject=> Boolean(ele))
-
-
+      }).filter((ele):ele is CarListObject=> Boolean(ele))
 
     })
+
     return result
   }
 
-  // a 태그의 href값을 원하는 페이지값으로 변경 후 클릭한다.
-  private async movePage(page: Page, pageNum: number) {
-
-    await page.evaluate((pageNum) => {
-      const element = document.querySelector('#paging > a:nth-child(1)')!
-      element.setAttribute('href', `javascript:changePagenum(${pageNum});`)
-    }, pageNum)
-    // await page.waitForTimeout(3000);
-    await page.click('#paging > a:nth-child(1)');
-    // #searchList 의 style display가 none에서 block으로 변하면 리턴하면됨
-    await this.waitForSearchList(page)
+  private async crawlRange(page: Page, startPage: number, endPage: number) {
+    let catObjects: CarListObject[] = []
+    for (let i = startPage; i < endPage; i++) {
+      await this.movePage(page, i)
+      console.log(`targetPage after move: ${i}`);
+      const datas = await this.getCarListObjectsWithPage(page)
+      catObjects = [...catObjects, ...datas]
+    }
+    return catObjects
   }
 
-  private async getCarDetail(browser: Browser, manageNum: number) {
+    // a 태그의 href값을 원하는 페이지값으로 변경 후 클릭한다.
+    private async movePage(page: Page, pageNum: number) {
+      console.log("movePage");
+      await page.evaluate((pageNum) => {
+        const element = document.querySelector('#paging > a:nth-child(1)')!
+        element.setAttribute('href', `javascript:changePagenum(${pageNum});`)
+        
+      }, pageNum)
+      console.log("movePage evluate");
+      // await page.waitForTimeout(3000);
+      // 여기가 문제인 건 맞음. click이 안된다.
+      await page.click('#paging > a:nth-child(1)');
+      console.log("movePage click");
+      // #searchList 의 style display가 none에서 block으로 변하면 리턴하면됨
+      await this.carListPageWaiter.waitForSearchList(page)
+    }
+
+  async crawlCarList(startPage: number, endPage: number) {
+    const { browser, page } = await this.carListPageInitializer.createInitializedBrowsers()
+    const startTime = Date.now()
+    const carObjects = await this.crawlRange(page, startPage, endPage)
+    const endTime = Date.now()
+    console.log(endTime - startTime);
+    await browser.close()
+    return carObjects
+  }
+}
+
+
+
+type CarDetailObject = {
+  carInfoMap: {
+    [k: string]: string
+  },
+  carCheckSrc: string,
+  carImgList: string[]
+}
+
+// 얘는 Initializer가 필요없음
+export class CarDetailCralwer {
+  constructor(private envs: Environments) {}
+
+  private async getBrowser() {
+    const chromium = require("chrome-aws-lambda");
+    const puppeteer: PuppeteerNode = chromium.puppeteer
+    return await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      // headless: true
+      headless: chromium.headless
+    });
+  }
+
+  async crawlRange(manageNums: number[]) {
+    const browser = await this.getBrowser()
+    const [page] = await browser.pages();
+    let catObjects: CarDetailObject[] = []
+    for (let i = 0; i < manageNums.length; i++) {
+      const carDetail = await this.getCarDetail(page, manageNums[i])
+      catObjects.push(carDetail)
+    }
+    console.log("done");
+    
+    await browser.close()
+    return catObjects
+
+  }
+
+  private async getCarDetail(page: Page, manageNum: number) {
     const { BCAR_DETAIL_PAGE_TEMPLATE } = this.envs
-    const page = await browser.newPage();
     await page.goto(`${BCAR_DETAIL_PAGE_TEMPLATE}${manageNum}`, { waitUntil: 'load' })
     let data_len = await page.$$eval( "#detail_box > div.right > div > div.carContTop > ul > li", data => {
         return data.length;
@@ -130,7 +287,7 @@ export class CarCrawler {
         )
     }
     const carCheckSrc = await page.$eval(`#detail_box > div:nth-child(21) > iframe`, (element)=>{
-        return element.getAttribute('src')
+        return element.getAttribute('src')!
     })
 
     // 이미지만 가져오기
@@ -141,7 +298,7 @@ export class CarCrawler {
     for (let index = 1; index < imgLen+1; index++) {
         carImgList.push(
             page.$eval(`#detail_box > div:nth-child(16) > a:nth-child(${index}) > img`, (element)=>{
-                return element.getAttribute('src')
+                return element.getAttribute('src')!
             })
         )
     }
@@ -152,149 +309,15 @@ export class CarCrawler {
     for (let i = 0; i < data_len; i++) {
       carInfoMap.set(carInfoKeys[i], carInfoValues[i])
     }
-    return {
+    console.log({
       carInfoMap,
       carCheckSrc,
       carImgList
-    }
-  }
-
-  private async getCarPages(page: Page) {
-    const carAmount = await page.$eval<string>('#sellOpenCarCount', (ele) => {
-      if (typeof ele.textContent == 'string') {
-        return ele.textContent
-      }
-      throw new Error(`text is not string: ${typeof ele.textContent}`)
-      
-    })
-    return Math.ceil( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
-  }
-
-  private async waitForSearchList(page: Page) {
-    let display = 'none'
-    while (display === 'none') {
-      display = await page.$eval('#searchList', ele => {
-        return window.getComputedStyle(ele).getPropertyValue('display')
-      })
-    }
-  }
-
-  private async crawlRange(page: Page, startPage: number, endPage: number) {
-    let catObjects: CarObject[] = []
-    for (let i = startPage; i < endPage; i++) {
-      // console.log(`targetPage before move: ${i}`);
-      await this.movePage(page, i)
-      console.log(`targetPage after move: ${i}`);
-      const datas = await this.getPagesCarObjects(page)
-      catObjects = [...catObjects, ...datas]
-    }
-    return catObjects
-  }
-
-  private async createInitializedPage() {
-    const browser = await this.getBrowser()
-    const [page] = await browser.pages()
-    await this.login(page)
-    await this.selectCarsWithMaxPrice(page, 2000)
-    return browser
-  }
-
-  private async createInitializedBrowsers(browserSize: number) {
-    const promiseBrowsers: Promise<Browser>[] = []
-    for (let i = 0; i < browserSize; i++) {
-      promiseBrowsers.push(this.createInitializedPage())
-    }
-    const browsers = await Promise.all(promiseBrowsers)
-    const promiseBrowsersPages = browsers.map(browser => browser.pages())
-    const browserPages = await Promise.all(promiseBrowsersPages)
-    const pages = browserPages.map(pages=>pages[0])
+    });
     return {
-      browsers,
-      pages
+      carInfoMap : Object.fromEntries(carInfoMap),
+      carCheckSrc,
+      carImgList
     }
-  }
-
-
-  private createRangeChunks(pageAmount: number) {
-    const rangeChunks: RangeChunk[] = []
-    for (let i = 1; i < pageAmount + 1; i = i + 10) {
-      rangeChunks.push({
-        start: i,
-        end: Math.min(i+10, pageAmount)
-      })
-    }
-    return rangeChunks
-  }
-
-  private async asyncCrawl(browserSize: number, rangeChunks: RangeChunk[], pages: Page[]) {
-    let carObjects: CarObject[] = []
-    while (rangeChunks.length) {
-      const endIdx = Math.min(browserSize, rangeChunks.length)
-      const promiseCarObjectsChunks: Promise<CarObject[]>[] = []
-      for (let i = 0; i < endIdx; i++) {
-        const range = rangeChunks.pop()
-        if (range) {
-          const { start, end } = range
-          promiseCarObjectsChunks.push(this.crawlRange(pages[i], start,end))
-        }
-      }
-      const carObjectsChunks = await Promise.all(promiseCarObjectsChunks)
-      for (const carObjectsChunk of carObjectsChunks) {
-        carObjects = [...carObjects, ...carObjectsChunk]
-      }
-    }
-    return carObjects
-  }
-
-  async crawlCarList() {
-    const { CRAWL_BROWSER_SIZE } = this.envs
-    const browserSize = parseInt(CRAWL_BROWSER_SIZE)
-    const { browsers, pages } = await this.createInitializedBrowsers(browserSize)
-    const pageAmount = await this.getCarPages(pages[0])
-
-    const rangeChunks = this.createRangeChunks(pageAmount)
-    console.log(rangeChunks);
-
-    const startTime = Date.now()
-    const carObjects = await this.asyncCrawl(browserSize, rangeChunks, pages)
-    const endTime = Date.now()
-    console.log(endTime - startTime);
-
-    const closed = browsers.map(browser=>browser.close())
-    await Promise.all(closed)
-
-    return carObjects
-  }
-
-  // 진입 method
-  async crawlTest() {
-    const browser = await this.createInitializedPage()
-    const [page] = await browser.pages()
-    const carObject = await this.crawlRange(page, 1, 2)
-    console.log(carObject);
-    
-    await browser.close()
-    // 결과적으로 진행되어야 하는 순서
-    // 1. 로그인 후 2000만원 설정 후 클릭
-    // 2. 로딩을 기다린 후 판매중인 대수를 가져와서 몫연산으로 전체 페이지 수를 구한다.
-    // 3. 전체 페이지 개수를 저장한다.
-    // (이 때 처음 탭은 1페이지를 저장하는데 사용하지 않는다. 관심사의 분리를 명확히 하기 위한 것)
-    // 4. 이제 각 페이지 수만큼 자손 탭을 생성한다
-    // 5. 자손 탭들은 가격 2000만원 설정 후 각 페이지로 이동한다.
-    // 6. 각 페이지에서 자손 탭들은 차량번호, 등록번호, 원가를 가져온다.
-    // 7. 각 결과값은 리스트에 넣는다.
-    // 8. Promise.all()로 전체 데이터를 최종적으로 수집해서 가져온다.
-    // 9. 데이터베이스에 저장 후 종료
-  }
-
-  save() {
-    const {
-      DYNAMO_DB_REGION,
-      BCAR_TABLE,
-      BCAR_INDEX,
-    } = this.envs
-    const client = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX);
-
-    throw new Error("Not implemented")
   }
 }
