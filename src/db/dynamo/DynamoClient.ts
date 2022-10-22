@@ -12,12 +12,12 @@ import {
   ExecuteStatementCommand,
   ExecuteStatementCommandInput,
   PutRequest,
-  DeleteRequest,
   AttributeValue,
   DeleteItemCommand,
   DeleteItemCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { ResponseError } from "../../errors"
+import { chunk } from "../../utils/index"
 
 class DynamoBaseClient {
   client: DynamoDBClient;
@@ -133,17 +133,6 @@ export class DynamoClient {
     });
   }
 
-  batchCreateCar(...inputs: PutRequest[]) {
-    return this.baseClient.batchWriteItem({
-      RequestItems: {
-        [this.tableName] : [
-          ...inputs.map(putRequest=>{
-            return { PutRequest: putRequest }
-          })
-        ]
-      }
-    })
-  }
 
   getAllPostOfUser(userId: string) {
     return this.baseClient.queryItems({
@@ -244,15 +233,48 @@ export class DynamoClient {
     })
   }
 
-  batchDeleteCar(...inputs: DeleteRequest[]) {
-    return this.baseClient.batchWriteItem({
-      RequestItems: {
-        [this.tableName] : [
-          ...inputs.map(deleteRequest=>{
-            return { DeleteRequest: deleteRequest }
-          })
-        ]
+
+
+  async batchCreateCar(...putRequestInputs: PutRequest[]) {
+    const input = putRequestInputs.map(input=> {
+      return { PutRequest: input }
+    })
+    const createRequestInputChunks = chunk(input, 25);
+
+    const promiseResponses = createRequestInputChunks.map(putRequests => {
+      return this.baseClient.batchWriteItem({
+        RequestItems: {
+          [this.tableName]: putRequests
+        }
+      });
+    })
+
+    return Promise.all(promiseResponses)
+  }
+
+  async batchDeleteCar(carsShouldDelete: string[]) {
+
+    const deleteRequestInput = carsShouldDelete.map(car => {
+      return {
+        DeleteRequest : {
+          Key: {
+            PK: { S: `#CAR-${car}`},
+            SK: { S: `#CAR-${car}`},
+          }
+        }
       }
     })
+    const deleteRequestInputChunks = chunk(deleteRequestInput, 25);
+
+    const promiseResponses = deleteRequestInputChunks.map(deleteRequests => {
+      return this.baseClient.batchWriteItem({
+        RequestItems: {
+          [this.tableName] : deleteRequests
+        }
+      })
+    })
+
+    return Promise.all(promiseResponses)
+
   }
 }

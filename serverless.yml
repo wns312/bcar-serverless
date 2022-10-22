@@ -21,10 +21,16 @@ provider:
     BCAR_INDEX: ${self:custom.indexName}
 
 functions:
+
   manageBCar:
     timeout: 600
     memorySize: 2048
     handler: src/index.manageBCar
+
+  crawlBCarList:
+    timeout: 300
+    handler: src/index.crawlBCarList
+
   crawlBCarDetail:
     timeout: 300
     handler: src/index.crawlBCarDetail
@@ -55,7 +61,7 @@ resources:
 
         GlobalSecondaryIndexes:
           - IndexName: ${self:custom.indexName}
-            KeySchema: 
+            KeySchema:
             - AttributeName: SK
               KeyType: HASH
             - AttributeName: PK
