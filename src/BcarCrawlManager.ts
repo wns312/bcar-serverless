@@ -8,7 +8,7 @@ import {
 import {
   BatchWriteItemCommandOutput,
   PutRequest,
-  ScanCommandOutput,
+  DeleteRequest,
   AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import {
@@ -24,7 +24,6 @@ type CarListObject = {
   carNum: string;
   detailPageNum: number;
   price: number;
-  // 여기서 원가도 리턴해주어야 함
 };
 
 type CarInfoMap = {
@@ -239,28 +238,33 @@ export class BcarCrawlManager {
   }
 
   async execute() {
-    let pageAmount = await this.carPageAmountCrawler.crawl();
-    const carListInDatabase = await this.dynamoClient.getAllCarNumber(3)
-
+    const carListInDatabase = await this.dynamoClient.getAllCarNumber(10)
     console.log(carListInDatabase.count);
+    return
+    let pageAmount = await this.carPageAmountCrawler.crawl();
     // const carListObjects = await this.carListCrawlwer.batCrawlCarListForLocal(40)
     const carListObjects = await this.carListCrawlwer.crawlCarList(1, pageAmount)
 
+    // Detail 크롤링 여부 필터링 구간.
+    // 추후에 업데이트 관련 부분이 추가될 수 있음. 이 경우 detail 정보를 전부 긁어와야 하기 때문에 실현 가능성은 낮다.
     const { carsShouldDelete, carsShouldCrawl } = await this.filterCrawlDetails(carListObjects, carListInDatabase);
+    console.log(carsShouldDelete);
+    console.log(carsShouldDelete.length);
+
     console.log(carsShouldCrawl);
+    // 크롤링 할 데이터가 없는경우 람다 실행을 하지 않고 리턴되는 구간. 이 구간때문에 삭제 로직이 수행되지 않을 수 있으므로 처리 필요.
     if (!carsShouldCrawl.length) {
       console.log("there is no cars to crawl. end the execution");
       return
     }
+    // Detail 조회 람다 호출 구간
     const invokeCommands = this.createInvokeCommands(carsShouldCrawl);
     const responses = await this.crawlDetailDatas(invokeCommands);
     const carDetailObjects = await this.parseDatas(responses);
-    // writeFile('myjsonfile.json', JSON.stringify(carDetailObjects), 'utf8', ()=>{
-    //   console.log("done");
-    // });
-    // return
+
     console.log(carDetailObjects.map((car)=>car.carImgList));
 
+    // 저장 로직 여기
     const results = await this.saveDatas(carDetailObjects);
     console.log("Result!!!!!s");
 
@@ -276,6 +280,22 @@ export class BcarCrawlManager {
           Boolean(result)
         )
     );
+
+    // 삭제 로직 여기
+    const carsShouldDeleteChunk = chunk(carsShouldDelete, 25);
+    const promiseResultChunk = carsShouldDeleteChunk.map(async chunk => {
+      return await this.dynamoClient.batchDeleteCar(...chunk.map(car => {
+        return {
+          Key: {
+            PK: { S: `#CAR-${car}`},
+            SK: { S: `#CAR-${car}`},
+          }
+        }
+      }))
+    })
+    const deleteResults = await Promise.all(promiseResultChunk)
+    console.log(deleteResults);
+
   }
 }
 

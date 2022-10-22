@@ -11,9 +11,11 @@ import {
   ScanCommandInput,
   ExecuteStatementCommand,
   ExecuteStatementCommandInput,
-  WriteRequest,
   PutRequest,
-  AttributeValue
+  DeleteRequest,
+  AttributeValue,
+  DeleteItemCommand,
+  DeleteItemCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { ResponseError } from "../../errors"
 
@@ -47,6 +49,10 @@ class DynamoBaseClient {
 
   async batchWriteItem(input: BatchWriteItemCommandInput) {
     return this.client.send(new BatchWriteItemCommand(input))
+  }
+
+  async deleteItems(input: DeleteItemCommandInput) {
+    return this.client.send(new DeleteItemCommand(input))
   }
 
 }
@@ -187,7 +193,6 @@ export class DynamoClient {
     return resultObj
   }
 
-  // 구조가 뭔가 잘못되었음. 개별로 재귀호출해서 가져올 수 있도록 해야함. 별도 메소드를 호출하도록 하자
   async getAllCarNumber(segmentSize: number) {
     const promiseList: Promise<{items: Record<string, AttributeValue>[], count: number}>[] = []
     for (let segmentIndex = 0; segmentIndex  < segmentSize; segmentIndex++) {
@@ -239,22 +244,15 @@ export class DynamoClient {
     })
   }
 
-  // PENDING: Implement when really need this.
-  // scanAll(limit: number) {
-  //   return this.baseClient.scanItems({
-  //     TableName: this.tableName,
-  //     Limit: limit,
-  //     ExclusiveStartKey: lastEvaluatedKey,
-  //   });
-  // }
-
-  // PENDING: Implement when really need this.
-  // scanAllWithSegment(limit: number, segment: number) {
-  //   return this.baseClient.scanItems({
-  //     TableName: this.tableName,
-  //     Limit: 10,
-  //     Segment: 1,
-  //     TotalSegments: 2,
-  //   });
-  // }
+  batchDeleteCar(...inputs: DeleteRequest[]) {
+    return this.baseClient.batchWriteItem({
+      RequestItems: {
+        [this.tableName] : [
+          ...inputs.map(deleteRequest=>{
+            return { DeleteRequest: deleteRequest }
+          })
+        ]
+      }
+    })
+  }
 }

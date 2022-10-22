@@ -17,6 +17,8 @@
 - [x] Crawl detail list asynchronously (impossible. multi browser raise error)
 - [x] Create compare logic which should be saved & deleted from (DB, target pages)
 - [x] Save into Table
+- [ ] Delete non-selling cars from database
+- [ ] Add price attribute into saving data (this has to be updated always)
 - [ ] Save target upload page's accounts
 - [ ] ...more
 
