@@ -1,5 +1,7 @@
 import {
   DynamoDBClient,
+  BatchWriteItemCommand,
+  BatchWriteItemCommandInput,
   QueryCommand,
   QueryCommandInput,
   DescribeTableCommand,
@@ -9,7 +11,11 @@ import {
   ScanCommandInput,
   ExecuteStatementCommand,
   ExecuteStatementCommandInput,
+  WriteRequest,
+  PutRequest,
+  AttributeValue
 } from "@aws-sdk/client-dynamodb";
+import { ResponseError } from "../../errors"
 
 class DynamoBaseClient {
   client: DynamoDBClient;
@@ -38,6 +44,11 @@ class DynamoBaseClient {
   async executeStatement(input: ExecuteStatementCommandInput) {
     return this.client.send(new ExecuteStatementCommand(input))
   }
+
+  async batchWriteItem(input: BatchWriteItemCommandInput) {
+    return this.client.send(new BatchWriteItemCommand(input))
+  }
+
 }
 
 export class DynamoClient {
@@ -116,6 +127,18 @@ export class DynamoClient {
     });
   }
 
+  batchCreateCar(...inputs: PutRequest[]) {
+    return this.baseClient.batchWriteItem({
+      RequestItems: {
+        [this.tableName] : [
+          ...inputs.map(putRequest=>{
+            return { PutRequest: putRequest }
+          })
+        ]
+      }
+    })
+  }
+
   getAllPostOfUser(userId: string) {
     return this.baseClient.queryItems({
       TableName: this.tableName,
@@ -127,12 +150,86 @@ export class DynamoClient {
       },
     });
   }
+
   // https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/Scan.html
   // https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/Scan.html#:~:text=%EC%9A%A9%EB%9F%89%20%EB%8B%A8%EC%9C%84%EB%A5%BC%20%EC%82%AC%EC%9A%A9%ED%95%A9%EB%8B%88%EB%8B%A4.-,%EB%B3%91%EB%A0%AC%20%EC%8A%A4%EC%BA%94,-%EA%B8%B0%EB%B3%B8%EC%A0%81%EC%9C%BC%EB%A1%9C%20Scan%20%EC%9E%91%EC%97%85%EC%9D%80
-  scan() {
-    return this.baseClient.scanItems({
+
+  // 여기에야말로 지터가 들어가야될 수도 있음.
+  private async getAllCarNumberSegment(segment: number, segmentSize: number, exclusiveStartKey?:Record<string, AttributeValue>) {
+    const scanCommandInput = {
       TableName: this.tableName,
-    });
+      FilterExpression: "begins_with(SK, :s) and begins_with(PK, :p)",
+      ExpressionAttributeValues: {
+        ":p": { S: `#CAR` },
+        ":s": { S: `#CAR` },
+      },
+      Segment: segment,
+      TotalSegments: segmentSize,
+      ProjectionExpression: "CarNumber",
+      ExclusiveStartKey: exclusiveStartKey
+    }
+    const result = await this.baseClient.scanItems(scanCommandInput)
+
+    if (result.$metadata.httpStatusCode !== 200) {
+      throw new ResponseError(`${result.$metadata}`)
+    }
+
+    let resultObj = {
+      items: result.Items ? result.Items : [],
+      count: result.Count!
+    }
+
+    if (result.LastEvaluatedKey) {
+      const additionalItems = await this.getAllCarNumberSegment(segment, segmentSize, result.LastEvaluatedKey)
+      resultObj.items = [...resultObj.items, ...additionalItems.items]
+      resultObj.count += additionalItems.count
+    }
+    return resultObj
+  }
+
+  // 구조가 뭔가 잘못되었음. 개별로 재귀호출해서 가져올 수 있도록 해야함. 별도 메소드를 호출하도록 하자
+  async getAllCarNumber(segmentSize: number) {
+    const promiseList: Promise<{items: Record<string, AttributeValue>[], count: number}>[] = []
+    for (let segmentIndex = 0; segmentIndex  < segmentSize; segmentIndex++) {
+      promiseList.push(this.getAllCarNumberSegment(segmentIndex, segmentSize))
+    }
+    const results = await Promise.all(promiseList)
+
+    return results.reduce((obj, resultObj)=>{
+      return { items: [...obj.items, ...resultObj.items], count: obj.count + resultObj.count}
+      }, { items: [], count: 0})
+  }
+
+  getAllCarCountSegment(segmentSize: number) {
+    const list: ScanCommandInput[] = []
+    for (let i = 0; i < segmentSize; i++) {
+      list.push({
+        TableName: this.tableName,
+        FilterExpression: "begins_with(SK, :s) and begins_with(PK, :p)",
+        ExpressionAttributeValues: {
+          ":p": { S: `#CAR` },
+          ":s": { S: `#CAR` },
+        },
+        Select: "COUNT",
+        Segment: i,
+        TotalSegments: segmentSize,
+      })
+    }
+    const promiseResults = list.map(input => this.baseClient.scanItems(input))
+    return Promise.all(promiseResults)
+  }
+
+  getAllCarCount() {
+    const result = this.baseClient.scanItems({
+      TableName: this.tableName,
+      FilterExpression: "begins_with(SK, :s) and begins_with(PK, :p)",
+      ExpressionAttributeValues: {
+        ":p": { S: `#CAR` },
+        ":s": { S: `#CAR` },
+      },
+      Select: "COUNT",
+    })
+    return result
   }
   // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ql-functions.size.html
   // USER별 POST COUNT가 특정 수 이하인 USER의 목록을 뽑을 수 있어야 함: Query와 Scan의 SELECT 옵션에서 COUNT를 지정할 수 있음

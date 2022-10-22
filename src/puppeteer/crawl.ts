@@ -1,5 +1,4 @@
-import { Browser, Page, PuppeteerNode } from "puppeteer-core";
-import { DynamoClient } from "../db/dynamo/DynamoClient";
+import { Page, PuppeteerNode } from "puppeteer-core";
 import { envs } from '../configs'
 
 type Environments = typeof envs
@@ -40,13 +39,17 @@ type RangeChunk = {
 // }
 
 export class CarListPageWaiter {
+  // 여기서 무한대기 걸릴수도 있음
   async waitForSearchList(page: Page) {
+    console.log("waitForSearchList start");
+
     let display = 'none'
     while (display === 'none') {
       display = await page.$eval('#searchList', ele => {
         return window.getComputedStyle(ele).getPropertyValue('display')
       })
     }
+    console.log("waitForSearchList end");
   }
 }
 
@@ -91,8 +94,8 @@ export class CarListPageInitializer {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath,
-      // headless: true
-      headless: chromium.headless
+      headless: true
+      // headless: chromium.headless
     });
   }
 
@@ -101,7 +104,7 @@ export class CarListPageInitializer {
     const [page] = await browser.pages()
     await this.login(page)
     await this.selectCarsWithMaxPrice(page, 2000)
-    
+
     return {
       browser,
       page
@@ -132,7 +135,7 @@ export class CarPageAmountCrawler {
         return ele.textContent
       }
       throw new Error(`text is not string: ${typeof ele.textContent}`)
-      
+
     })
     return Math.ceil( (parseInt(carAmount.replace(',', '')) / 100) ) + 1
   }
@@ -141,13 +144,10 @@ export class CarPageAmountCrawler {
     const { browser, page } = await this.carListPageInitializer.createInitializedBrowsers()
     const pageAmount = await this.getCarPages(page)
     await browser.close()
-    // TODO: 5개씩 쪼개는 range의 경우 제대로 처리되지 않는다. 확인해볼 것 
+    // TODO: 5개씩 쪼개는 range의 경우 제대로 처리되지 않는다. 확인해볼 것
     return pageAmount
   }
 }
-
-
-
 
 
 export class CarListCralwer {
@@ -160,8 +160,7 @@ export class CarListCralwer {
 
   // 특정 목록 페이지의 차량 번호와 등록 번호를 가져온다.
   private async getCarListObjectsWithPage(page: Page): Promise<CarListObject[]> {
-    // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1)
-    // #searchList > table > tbody > tr:nth-child(2) > td:nth-child(1) > span.checkbox > input
+    // Error: Node is either not clickable or not an HTMLElement
     const result = await page.$$eval('#searchList > table > tbody > tr', elements => {
 
       return elements.map(ele => {
@@ -197,17 +196,14 @@ export class CarListCralwer {
 
     // a 태그의 href값을 원하는 페이지값으로 변경 후 클릭한다.
     private async movePage(page: Page, pageNum: number) {
-      console.log("movePage");
       await page.evaluate((pageNum) => {
         const element = document.querySelector('#paging > a:nth-child(1)')!
         element.setAttribute('href', `javascript:changePagenum(${pageNum});`)
-        
+
       }, pageNum)
-      console.log("movePage evluate");
       // await page.waitForTimeout(3000);
       // 여기가 문제인 건 맞음. click이 안된다.
       await page.click('#paging > a:nth-child(1)');
-      console.log("movePage click");
       // #searchList 의 style display가 none에서 block으로 변하면 리턴하면됨
       await this.carListPageWaiter.waitForSearchList(page)
     }
@@ -221,20 +217,65 @@ export class CarListCralwer {
     await browser.close()
     return carObjects
   }
+
+  async batCrawlCarListForLocal(pageSize: number) {
+    const pageChunk = []
+    for (let i = 1; i < pageSize; i = i+10) {
+      const endPage = Math.min(i+10, pageSize)
+      pageChunk.push([i, endPage])
+
+    }
+    console.log(pageChunk);
+
+    const carListObjectList = await Promise.all(
+      pageChunk.map(([startPage, endPage]) => this.crawlCarList(startPage, endPage))
+    )
+    return carListObjectList.reduce((list, chunk)=>[...list, ...chunk], [] as CarListObject[])
+  }
 }
 
 
 
 type CarDetailObject = {
   carInfoMap: {
-    [k: string]: string
+    [k: string]: string | boolean
   },
   carCheckSrc: string,
   carImgList: string[]
 }
 
-// 얘는 Initializer가 필요없음
+
 export class CarDetailCralwer {
+  Category = "Category"
+  Displacement = "Displacement"
+  CarNumber = "CarNumber"
+  ModelYear = "ModelYear"
+  Mileage = "Mileage"
+  Color = "Color"
+  GearBox = "GearBox"
+  FuelType = "FuelType"
+  PresentationNumber = "PresentationNumber"
+  HasAccident = "HasAccident"
+  RegisterNumber = "RegisterNumber"
+  PresentationsDate = "PresentationsDate"
+  HasSeizure = "HasSeizure"
+  HasMortgage = "HasMortgage"
+  carInfoKeys = [
+    this.Category,
+    this.Displacement,
+    this.CarNumber,
+    this.ModelYear,
+    this.Mileage,
+    this.Color,
+    this.GearBox,
+    this.FuelType,
+    this.PresentationNumber,
+    this.HasAccident,
+    this.RegisterNumber,
+    this.PresentationsDate,
+    this.HasSeizure,
+    this.HasMortgage,
+  ]
   constructor(private envs: Environments) {}
 
   private async getBrowser() {
@@ -251,44 +292,50 @@ export class CarDetailCralwer {
 
   async crawlRange(manageNums: number[]) {
     const browser = await this.getBrowser()
-    const [page] = await browser.pages();
-    let catObjects: CarDetailObject[] = []
-    for (let i = 0; i < manageNums.length; i++) {
-      const carDetail = await this.getCarDetail(page, manageNums[i])
-      catObjects.push(carDetail)
+    try {
+      const [page] = await browser.pages();
+      let catObjects: CarDetailObject[] = []
+      for (let i = 0; i < manageNums.length; i++) {
+        const carDetail = await this.getCarDetail(page, manageNums[i])
+        catObjects.push(carDetail)
+      }
+      console.log("done");
+      await browser.close()
+      return catObjects
+    } catch (e) {
+      console.log(e);
+      await browser.close()
     }
-    console.log("done");
-    
-    await browser.close()
-    return catObjects
-
   }
 
   private async getCarDetail(page: Page, manageNum: number) {
     const { BCAR_DETAIL_PAGE_TEMPLATE } = this.envs
-    await page.goto(`${BCAR_DETAIL_PAGE_TEMPLATE}${manageNum}`, { waitUntil: 'load' })
+    await page.goto(
+      `${BCAR_DETAIL_PAGE_TEMPLATE}${manageNum}`,
+      // 생각보다 되게 중요한 부분. Timeout Error를 피하기 위해 필요한 부분
+      { waitUntil: 'networkidle2', timeout: 0 }
+    )
     let data_len = await page.$$eval( "#detail_box > div.right > div > div.carContTop > ul > li", data => {
         return data.length;
     });
 
-    // 차 정보 가져오는 부분
-    let carInfoKeys = []
-    let carInfoValues = []
+    let promiseCarInfoValues: Promise<string>[] = []
     for (let index = 1; index < data_len+1; index++) {
-        carInfoKeys.push(
-            page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.tit`, (data)=>{
-                return data.textContent ? data.textContent.trim() : ''
-            })
-        )
-        carInfoValues.push(
+        promiseCarInfoValues.push(
             page.$eval(`#detail_box > div.right > div > div.carContTop > ul > li:nth-child(${index}) > span.txt`, (data)=>{
                 return data.textContent ? data.textContent.trim() : ''
             })
         )
     }
-    const carCheckSrc = await page.$eval(`#detail_box > div:nth-child(21) > iframe`, (element)=>{
+    let carCheckSrc: string = ''
+    try {
+      carCheckSrc = await page.$eval(`#detail_box > div:nth-child(21) > iframe`, (element)=>{
         return element.getAttribute('src')!
-    })
+      })
+    } catch (error) {
+      console.log("No CheckSrc");
+    }
+
 
     // 이미지만 가져오기
     const imgLen = await page.$$eval(`#detail_box > div:nth-child(16) > a`, (element)=>{
@@ -302,13 +349,16 @@ export class CarDetailCralwer {
             })
         )
     }
-    carInfoKeys = await Promise.all(carInfoKeys)
-    carInfoValues = await Promise.all(carInfoValues)
+    // carInfoKeys = await Promise.all(carInfoKeys)
+    const carInfoValues = await Promise.all(promiseCarInfoValues)
+    const [HasSeizure, HasMortgage] = carInfoValues.pop()!.split(' / ')
     carImgList = await Promise.all(carImgList)
-    const carInfoMap = new Map<string, string>()
-    for (let i = 0; i < data_len; i++) {
-      carInfoMap.set(carInfoKeys[i], carInfoValues[i])
+    const carInfoMap = new Map<string, string|boolean>()
+    for (let i = 0; i < carInfoValues.length ; i++) {
+      carInfoMap.set(this.carInfoKeys[i], carInfoValues[i])
     }
+    carInfoMap.set(this.HasSeizure, HasSeizure === "없음" ? false : true)
+    carInfoMap.set(this.HasMortgage, HasMortgage === "없음" ? false : true)
     console.log({
       carInfoMap,
       carCheckSrc,
