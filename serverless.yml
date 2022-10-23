@@ -27,7 +27,9 @@ functions:
     memorySize: 2048
     handler: src/index.manageBCar
     events:
+      # 저녁 9시
       - schedule: cron(0 12 * * ? *)
+      # 아침 6시
       - schedule: cron(0 21 * * ? *)
 
   crawlBCarList:

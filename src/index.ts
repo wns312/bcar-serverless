@@ -12,6 +12,7 @@ import {
   CarDetailCralwer
 } from "./puppeteer";
 import { BCarDetailEventInput, BCarListEventInput } from "./types"
+import { SNSClient, PublishCommand, PublishCommandInput } from "@aws-sdk/client-sns";
 
 // 우선 배포 함수와 배포 단계가 너무 거창해지기 때문에 이 함수 하나로 모든 프로세스를 완료하도록 할 것
 // 메모리 사이즈에 대한 고려가 필요하다.
@@ -27,18 +28,52 @@ exports.manageBCar = async (
 
   const lambdaClient = new LambdaClient({ region: DYNAMO_DB_REGION });
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  try {
+    await new BcarCrawlManager(
+      carPageAmountCrawler,
+      lambdaClient,
+      dynamoClient,
+    ).execute()
 
-  await new BcarCrawlManager(
-    carPageAmountCrawler,
-    lambdaClient,
-    dynamoClient,
-  ).execute()
+  } catch (error) {
+    if (error instanceof Error) {
+      const errorMessage = `${error.name}: ${error.message}`
+      const {awsRequestId, functionName,  logStreamName} = context
+      const message = (
+        `${errorMessage}\n`
+        +`AwsRequestId: ${awsRequestId}\n`
+        +`FunctionName: ${functionName}\n`
+        +`LogStreamName: ${logStreamName}`
+      )
+      const stack = `Error Stack: ${error.stack}`
+      console.error(stack);
 
-  await new BcarCrawlManager(
-    carPageAmountCrawler,
-    lambdaClient,
-    dynamoClient,
-  ).updatePrices()
+      const snsClient = new SNSClient({ region: DYNAMO_DB_REGION });
+      const publishCommand = new PublishCommand({
+        Message: message,
+        TopicArn: 'arn:aws:sns:ap-northeast-1:313736530215:ErrorReport'
+      })
+      try {
+        const data = await snsClient.send(publishCommand);
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error("Sending message has been failed");
+          const errorMessage = `${error.name}: ${error.message}`
+          const {awsRequestId, functionName,  logStreamName} = context
+          const message = (
+            `${errorMessage}\n`
+            +`AwsRequestId: ${awsRequestId}\n`
+            +`FunctionName: ${functionName}\n`
+            +`LogStreamName: ${logStreamName}`
+          )
+          const stack = `Error Stack: ${error.stack}`
+          console.error(message)
+          console.error(stack)
+        }
+      }
+    }
+  }
+
 
   return {
     statusCode: 200,
