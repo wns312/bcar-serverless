@@ -15,18 +15,30 @@ provider:
   name: aws
   runtime: nodejs14.x
   region: ap-northeast-1
-  timeout: 29
+
   environment:
     BCAR_TABLE: ${self:custom.tableName}
     BCAR_INDEX: ${self:custom.indexName}
 
 functions:
-  hello:
-    handler: src/index.hello
+
+  manageBCar:
+    timeout: 600
+    memorySize: 2048
+    handler: src/index.manageBCar
     events:
-      - httpApi:
-          path: /
-          method: get
+      # 저녁 9시
+      - schedule: cron(0 12 * * ? *)
+      # 아침 6시
+      - schedule: cron(0 21 * * ? *)
+
+  crawlBCarList:
+    timeout: 300
+    handler: src/index.crawlBCarList
+
+  crawlBCarDetail:
+    timeout: 300
+    handler: src/index.crawlBCarDetail
 
 plugins:
   - serverless-plugin-typescript
@@ -54,11 +66,10 @@ resources:
 
         GlobalSecondaryIndexes:
           - IndexName: ${self:custom.indexName}
-            KeySchema: 
+            KeySchema:
             - AttributeName: SK
               KeyType: HASH
             - AttributeName: PK
               KeyType: RANGE
             Projection:
               ProjectionType: ALL
-
