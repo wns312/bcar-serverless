@@ -8,6 +8,7 @@
 - [x] Find the way how to join dynamodb tables
 - [x] Database Design
 ### Implements
+#### Crawl cars
 - [x] Create DynamoClient with DynamoBaseClient 
 - [x] Login into target crawl page
 - [x] Crawl car list asynchronously
@@ -17,21 +18,16 @@
 - [x] Crawl detail list asynchronously (impossible. multi browser raise error)
 - [x] Create compare logic which should be saved & deleted from (DB, target pages)
 - [x] Save into Table
-- [ ] Delete non-selling cars from database
-- [ ] Add price attribute into saving data (this has to be updated always)
-- [ ] Save target upload page's accounts
-- [ ] ...more
+- [x] Delete non-selling cars from database
+- [x] Add price attribute into saving data (this has to be updated always)
+- [x] Save target upload page's accounts
+- [ ] Refactor execution flow (make much readable)
+- [ ] (Optional) Apply sentry integration instead of aws sns
 
-## Packages
-- chrome-aws-lambda: 10.1.0
-- puppeteer-core: 10.4.0
-- @aws-sdk/client-dynamodb
-### Dev Packages
-- typescript
-- serverless-plugin-typescript
-- serverless-offline
-- @types/aws-lambda
-- puppeteer: 10.1.0
+#### Upload cars
+- [ ] Add user's in database
+- [ ] Add site envs in env file
+- [ ] Add site handlers
 
 # Errors
 ### Type error
