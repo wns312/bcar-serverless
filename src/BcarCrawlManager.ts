@@ -9,7 +9,7 @@ import {
   CarInfoMap,
   // CarDetailObject,
   DBCarListObject,
-  BatchCreateCarInput
+  batchPutCarsInput
 } from "./types"
 import { chunk, rangeChunk } from "./utils"
 
@@ -114,8 +114,8 @@ export class BcarCrawlManager {
     return responses
   }
 
-  createPutRequestInput(car: CarDetailObject) {
-    const input: BatchCreateCarInput = {
+  createPutRequestInput(car: CarDetailObject, price: number) {
+    const input: batchPutCarsInput = {
       PK: { S: `#CAR-${car.carInfoMap.CarNumber}` },
       SK: { S: `#CAR-${car.carInfoMap.CarNumber}` },
       Category: { S: car.carInfoMap.Category },
@@ -124,6 +124,7 @@ export class BcarCrawlManager {
       ModelYear: { S: car.carInfoMap.ModelYear },
       Mileage: { S: car.carInfoMap.Mileage },
       Color: { S: car.carInfoMap.Color },
+      Price: { N: price.toString() },
       GearBox: { S: car.carInfoMap.GearBox },
       FuelType: { S: car.carInfoMap.FuelType },
       PresentationNumber: { S: car.carInfoMap.PresentationNumber },
@@ -142,12 +143,12 @@ export class BcarCrawlManager {
     }
   }
 
-  async saveDatas(carDetailObjects: CarDetailObject[]) {
+  async saveDatas(carDetailObjects: CarDetailObject[],  crawledCarListMap: Map<string, CarListObject>) {
     const PutRequestObjects: PutRequest[] = carDetailObjects.map((car) => {
-      return this.createPutRequestInput(car);
+      return this.createPutRequestInput(car, crawledCarListMap.get(car.carInfoMap.CarNumber)!.price);
     });
 
-    return await this.dynamoClient.batchCreateCar(...PutRequestObjects)
+    return await this.dynamoClient.batchPutCars(...PutRequestObjects)
   }
 
   parseDatas<T>(responses: InvokeCommandOutput[]) {
@@ -176,18 +177,18 @@ export class BcarCrawlManager {
     const carListObjects = this.parseDatas<CarListObject>(crawlListResponses)
     console.log("carListObjects.length");
     console.log(carListObjects.length);
-    const r = carListObjects.reduce((map, input)=>{
-      let count = map.get(input.carNum)
-      if (!count) {
-        count = 0
-      }
-      return map.set(input.carNum, count + 1)
-    }, new Map<string, number>())
-    Array.from(r.entries()).forEach(([carNum, count])=> {
-      if (count > 1) {
-        console.log(`${carNum} ${count}`);
-      }
-    })
+    // const r = carListObjects.reduce((map, input)=>{
+    //   let count = map.get(input.carNum)
+    //   if (!count) {
+    //     count = 0
+    //   }
+    //   return map.set(input.carNum, count + 1)
+    // }, new Map<string, number>())
+    // Array.from(r.entries()).forEach(([carNum, count])=> {
+    //   if (count > 1) {
+    //     console.log(`${carNum} ${count}`);
+    //   }
+    // })
     // const carListObjects = await this.carListCrawlwer.crawlCarList(1, pageAmount)
 
     const { carsShouldDelete, carsShouldCrawl } = this.filterCrawlDetails(carListObjects, carListInDatabase);
@@ -205,12 +206,46 @@ export class BcarCrawlManager {
     const crawlDetailResponses = await this.crawlDetailDatas(carsShouldCrawl);
     const carDetailObjects = this.parseDatas<CarDetailObject>(crawlDetailResponses);
 
-    // 저장 로직 여기
-    const saveResponses = await this.saveDatas(carDetailObjects);
+    const crawledCarListMap = carListObjects.reduce((map, carObj) => {
+      return map.set(carObj.carNum, carObj)
+    }, new Map<string, CarListObject>())
+
+    // 저장 로직: 차량 가격도 저장되어야 한다. 업데이트 로직이 필요할 것
+    const saveResponses = await this.saveDatas(carDetailObjects, crawledCarListMap);
     console.log(saveResponses)
 
-    // 삭제 로직 여기
+    // 삭제 로직
     const deleteresponses = await this.dynamoClient.batchDeleteCar(carsShouldDelete)
+
+  }
+
+  async updatePrices() {
+    const carListInDatabase = await this.dynamoClient.getAllCars(10)
+    const pageAmount = await this.carPageAmountCrawler.crawl();
+    const crawlListResponses = await this.crawlCarListDatas(pageAmount, 5)
+    const carListObjects = this.parseDatas<CarListObject>(crawlListResponses)
+    const crawledCarListMap = carListObjects.reduce((map, carObj) => {
+      return map.set(carObj.carNum, carObj)
+    }, new Map<string, CarListObject>())
+
+    const putRequests = carListInDatabase.items.reduce((list, item) => {
+      const newPrice = crawledCarListMap.get(item.CarNumber.S!)!.price.toString()
+      if (item.Price && item.Price.N && item.Price.N == newPrice) {
+        return list
+      }
+      item.Price = { N : newPrice }
+      list.push({Item: item})
+      return list
+    }, [] as PutRequest[])
+
+    if (!putRequests.length) {
+      console.log("there is no need to update");
+      return
+    }
+
+    const results =  await this.dynamoClient.batchPutCars(...putRequests)
+    console.log(results);
+
   }
 
 }

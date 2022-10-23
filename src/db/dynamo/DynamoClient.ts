@@ -15,6 +15,7 @@ import {
   AttributeValue,
   DeleteItemCommand,
   DeleteItemCommandInput,
+  UpdateItemCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { ResponseError } from "../../errors"
 import { chunk } from "../../utils/index"
@@ -233,9 +234,7 @@ export class DynamoClient {
     })
   }
 
-
-
-  async batchCreateCar(...putRequestInputs: PutRequest[]) {
+  async batchPutCars(...putRequestInputs: PutRequest[]) {
     const input = putRequestInputs.map(input=> {
       return { PutRequest: input }
     })
@@ -273,8 +272,82 @@ export class DynamoClient {
         }
       })
     })
-
     return Promise.all(promiseResponses)
+  }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  private async getAllCarsSegment(segment: number, segmentSize: number, exclusiveStartKey?:Record<string, AttributeValue>) {
+    const scanCommandInput = {
+      TableName: this.tableName,
+      FilterExpression: "begins_with(SK, :s) and begins_with(PK, :p)",
+      ExpressionAttributeValues: {
+        ":p": { S: `#CAR` },
+        ":s": { S: `#CAR` },
+      },
+      Segment: segment,
+      TotalSegments: segmentSize,
+      ExclusiveStartKey: exclusiveStartKey
+    }
+    const result = await this.baseClient.scanItems(scanCommandInput)
+
+    if (result.$metadata.httpStatusCode !== 200) {
+      throw new ResponseError(`${result.$metadata}`)
+    }
+
+    let resultObj = {
+      items: result.Items ? result.Items : [],
+      count: result.Count!
+    }
+
+    if (result.LastEvaluatedKey) {
+      const additionalItems = await this.getAllCarsSegment(segment, segmentSize, result.LastEvaluatedKey)
+      resultObj.items = [...resultObj.items, ...additionalItems.items]
+      resultObj.count += additionalItems.count
+    }
+    return resultObj
+  }
+
+  async getAllCars(segmentSize: number) {
+    const promiseList: Promise<{items: Record<string, AttributeValue>[], count: number}>[] = []
+    for (let segmentIndex = 0; segmentIndex  < segmentSize; segmentIndex++) {
+      promiseList.push(this.getAllCarsSegment(segmentIndex, segmentSize))
+    }
+    const results = await Promise.all(promiseList)
+
+    return results.reduce((obj, resultObj)=>{
+      return { items: [...obj.items, ...resultObj.items], count: obj.count + resultObj.count}
+      }, { items: [], count: 0})
   }
 }

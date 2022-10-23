@@ -44,7 +44,7 @@ export type CarInfoMap = {
 };
 
 
-export type BatchCreateCarInput = {
+export type batchPutCarsInput = {
   PK: AttributeValue
   SK: AttributeValue
   Category: AttributeValue
@@ -62,6 +62,7 @@ export type BatchCreateCarInput = {
   HasSeizure: AttributeValue
   HasMortgage: AttributeValue
   CarCheckSrc: AttributeValue
+  Price: AttributeValue
   CarImgList?: AttributeValue
 };
 

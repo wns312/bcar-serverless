@@ -28,11 +28,17 @@ exports.manageBCar = async (
   const lambdaClient = new LambdaClient({ region: DYNAMO_DB_REGION });
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
 
+  // await new BcarCrawlManager(
+  //   carPageAmountCrawler,
+  //   lambdaClient,
+  //   dynamoClient,
+  // ).execute()
+
   await new BcarCrawlManager(
     carPageAmountCrawler,
     lambdaClient,
     dynamoClient,
-  ).execute()
+  ).updatePrices()
 
   return {
     statusCode: 200,
