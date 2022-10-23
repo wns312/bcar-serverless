@@ -26,6 +26,9 @@ functions:
     timeout: 600
     memorySize: 2048
     handler: src/index.manageBCar
+    events:
+      - schedule: cron(0 12 * * ? *)
+      - schedule: cron(0 21 * * ? *)
 
   crawlBCarList:
     timeout: 300
