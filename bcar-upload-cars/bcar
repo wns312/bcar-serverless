@@ -1,0 +1,48 @@
+#!/bin/sh
+
+COMMAND=$1
+shift
+
+case $COMMAND in
+  deploy:img)
+    TAG_NAME=$1
+
+    set -a && source env/aws.env && set +a   # env file import
+    docker buildx build --platform=linux/amd64 -t bcar-deploy-img .   # build for deploy
+
+    DOCKER_IMAGE_ID=$(docker images -q bcar-deploy-img)
+    DOCKER_IMAGE_TAG=${PRIVATE_REGISTRY_BASE_URL}/${PRIVATE_REGISTRY_PATH}:${TAG_NAME} # create additional envs
+
+    aws ecr get-login-password --region ${DEPLOY_REGION} | docker login --username AWS --password-stdin ${PRIVATE_REGISTRY_BASE_URL}  # ecr login
+
+    docker tag ${DOCKER_IMAGE_ID} ${DOCKER_IMAGE_TAG} && docker push ${DOCKER_IMAGE_TAG}  # docker tag assign & docker image push
+    ;;
+  deploy:env)
+    # Not implemented: this is for environment deployment of job definition
+    ;;
+  export:env)
+    PASSPHRASE=$1
+    if [[ -z $PASSPHRASE ]]; then
+      echo "No passphrase"
+      exit 1
+    fi
+    gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/.env
+    gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/local.env
+    gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/prod.env
+    gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/aws.env
+    ;;
+  import:env)
+    PASSPHRASE=$1
+    if [[ -z $PASSPHRASE ]]; then
+      echo "No passphrase"
+      exit 1
+    fi
+    gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/.env env/.env.gpg
+    gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/local.env env/local.env.gpg
+    gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/prod.env env/prod.env.gpg
+    gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/aws.env env/aws.env.gpg
+    ;;
+  *)
+    echo "Invalid comand '$COMMAND'"
+    exit 1
+esac

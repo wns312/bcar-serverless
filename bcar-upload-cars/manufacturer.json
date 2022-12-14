@@ -1,0 +1,10 @@
+{
+  "manufacturer": [
+    { "name": "현대", "dataValue": "000004" },
+    { "name": "기아", "dataValue": "000000" },
+    { "name": "삼성", "dataValue": "000001" },
+    { "name": "쌍용", "dataValue": "000003" },
+    { "name": "쉐보레(대우)", "dataValue": "000002" },
+    { "name": "기타", "dataValue": "000099" }
+  ]
+}
