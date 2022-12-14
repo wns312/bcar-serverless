@@ -1,9 +1,60 @@
 import { Page } from "puppeteer-core";
+import { fromUtf8, toUtf8 } from "@aws-sdk/util-utf8-node";
+import { LambdaClient, InvokeCommand, InvokeCommandOutput } from "@aws-sdk/client-lambda";
+
 import { CarListPageInitializer } from "./CarListPageInitializer"
 import { CarListPageWaiter } from "./CarListPageWaiter"
-import { Environments, CarListObject } from "../types"
+import { CarListObject } from "../types"
+import { rangeChunk } from "../utils"
 
-export class CarListCralwer {
+export class CarListCollectorLambda {
+
+  constructor(
+    private lambdaClient: LambdaClient,
+    ) {}
+
+  createCrawlListInvokeCommands(startPage: number, endPage: number) {
+    return new InvokeCommand({
+      FunctionName: "bestcar-dev-crawlBCarList",
+      Payload: fromUtf8(
+        JSON.stringify({
+          startPage,
+          endPage
+        })
+      )
+    })
+  }
+
+  parseDatas<T>(...responses: InvokeCommandOutput[]) {
+    return responses
+      .reduce((list, response) => {
+        try {
+          const payload = JSON.parse(toUtf8(response.Payload!));
+          return [...list, ...JSON.parse(payload.body).input];
+        } catch (error) {
+          console.error(error);
+          // console.error(response);
+          return [...list];
+        }
+      }, [] as T[])
+  }
+
+
+  async execute(pageSize: number) {
+    const ranges = rangeChunk(pageSize, 5)
+
+    const invokeCommands = ranges.map(({start, end}) =>this.createCrawlListInvokeCommands(start, end))
+
+    const promiseResults = invokeCommands.map((invokeCommand) =>
+      this.lambdaClient.send(invokeCommand)
+    );
+    const responses = await Promise.all(promiseResults);
+    const carListObjects = this.parseDatas<CarListObject>(...responses)
+    return carListObjects
+  }
+}
+
+export class CarListCollector {
 
   constructor(
     private carListPageInitializer: CarListPageInitializer,
@@ -88,4 +139,5 @@ export class CarListCralwer {
     const carListObjectList = await Promise.all(carListResponses)
     return carListObjectList.reduce((list, chunk)=>[...list, ...chunk], [] as CarListObject[])
   }
+
 }

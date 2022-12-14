@@ -169,7 +169,6 @@ export class DynamoClient {
     if (result.$metadata.httpStatusCode !== 200) {
       throw new ResponseError(`${result.$metadata}`)
     }
-
     let resultObj = {
       items: result.Items ? result.Items : [],
       count: result.Count!

@@ -5,10 +5,12 @@ import { BcarCrawlManager } from "./BcarCrawlManager"
 import { envs } from './configs'
 import { DynamoClient } from "./db/dynamo/DynamoClient";
 import {
+  CarDetailCollectorLambda,
   CarPageAmountCrawler,
   CarListPageInitializer,
   CarListPageWaiter,
-  CarListCralwer,
+  CarListCollector,
+  CarListCollectorLambda,
   CarDetailCralwer
 } from "./puppeteer";
 import { BCarDetailEventInput, BCarListEventInput } from "./types"
@@ -28,10 +30,14 @@ exports.manageBCar = async (
 
   const lambdaClient = new LambdaClient({ region: DYNAMO_DB_REGION });
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+
+  const carListCollector = new CarListCollectorLambda(lambdaClient)
+  const carDetailCollector = new CarDetailCollectorLambda(lambdaClient)
   try {
     await new BcarCrawlManager(
       carPageAmountCrawler,
-      lambdaClient,
+      carListCollector,
+      carDetailCollector,
       dynamoClient,
     ).execute()
 
@@ -92,12 +98,12 @@ exports.crawlBCarList = async (
 ) => {
   const carListPageWaiter = new CarListPageWaiter();
   const carListPageInitializer = new CarListPageInitializer(envs, carListPageWaiter)
-  const carListCrawlwer = new CarListCralwer(
+  const carListCollector = new CarListCollector(
     carListPageInitializer,
     carListPageWaiter
   )
   try {
-    const result = await carListCrawlwer.crawlCarList(
+    const result = await carListCollector.crawlCarList(
       event.startPage,
       event.endPage,
     )
