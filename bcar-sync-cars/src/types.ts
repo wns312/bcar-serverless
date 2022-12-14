@@ -21,12 +21,16 @@ export type BCarDetailEventInput = {
 export type Environments = typeof envs
 
 export type CarListObject = {
+  title: string;
+  company: string;
   carNum: string;
   detailPageNum: number;
   price: number;
 };
 
 export type CarInfoMap = {
+  Title: string;
+  Company: string;
   Category: string;
   Displacement: string;
   CarNumber: string;
@@ -47,6 +51,8 @@ export type CarInfoMap = {
 export type batchPutCarsInput = {
   PK: AttributeValue
   SK: AttributeValue
+  Title: AttributeValue
+  Company: AttributeValue
   Category: AttributeValue
   Displacement: AttributeValue
   CarNumber: AttributeValue

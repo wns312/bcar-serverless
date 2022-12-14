@@ -41,7 +41,7 @@ export class CarListCollectorLambda {
 
 
   async execute(pageSize: number) {
-    const ranges = rangeChunk(pageSize, 5)
+    const ranges = rangeChunk(pageSize, 200)
 
     const invokeCommands = ranges.map(({start, end}) =>this.createCrawlListInvokeCommands(start, end))
 
@@ -69,11 +69,16 @@ export class CarListCollector {
       return elements.map(ele => {
         const td = ele.getElementsByTagName('td')
         if (td.length) {
+          const title = td.item(2)!.querySelector('a > strong')!.textContent!.trim()
+          const rawCompany = title!.split(' ')[0]
+          const company = rawCompany != '제네시스' ? rawCompany : '현대'
           const rawCarNum =  td.item(0)!.textContent!
           const carNum = rawCarNum.split('\t').filter(str => ['\n', '', '광고중\n'].includes(str) ? false : true)[0]
           const detailPageNum = td.item(0)!.querySelector('span.checkbox > input')!.getAttribute('value')!
           const price = td.item(6)!.childNodes[0].textContent!.replace(',', '')
           return {
+            title,
+            company,
             carNum,
             detailPageNum: parseInt(detailPageNum),
             price: parseInt(price)

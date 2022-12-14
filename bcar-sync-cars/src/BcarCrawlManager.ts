@@ -2,7 +2,7 @@
 import { PutRequest } from "@aws-sdk/client-dynamodb";
 
 import { DynamoClient } from "./db/dynamo/DynamoClient";
-import { CarDetailCollectorLambda, CarDetailObject, CarListCollectorLambda, CarPageAmountCrawler } from "./puppeteer";
+import { CarDetailCollectorLambda, CarDetailObject, CarListCollector, CarListCollectorLambda, CarPageAmountCrawler } from "./puppeteer";
 import {
   CarListObject,
   DBCarListObject,
@@ -14,7 +14,7 @@ import {
 export class BcarCrawlManager {
   constructor(
     private carPageAmountCollector: CarPageAmountCrawler,
-    private carListCollector: CarListCollectorLambda,
+    private carListCollector: CarListCollector,
     private carDetailCollector: CarDetailCollectorLambda,
     private dynamoClient: DynamoClient,
   ) {
@@ -53,12 +53,14 @@ export class BcarCrawlManager {
     }
   }
 
-  createPutRequestInput(car: CarDetailObject, price: number) {
+  createPutRequestInput(car: CarDetailObject, title: string, company: string, price: number) {
     const input: batchPutCarsInput = {
       PK: { S: `#CAR-${car.carInfoMap.CarNumber}` },
       SK: { S: `#CAR-${car.carInfoMap.CarNumber}` },
       Category: { S: car.carInfoMap.Category },
       Displacement: { S: car.carInfoMap.Displacement },
+      Title: { S: title },
+      Company: { S: company },
       CarNumber: { S: car.carInfoMap.CarNumber },
       ModelYear: { S: car.carInfoMap.ModelYear },
       Mileage: { S: car.carInfoMap.Mileage },
@@ -84,7 +86,12 @@ export class BcarCrawlManager {
 
   async saveDatas(carDetailObjects: CarDetailObject[],  crawledCarListMap: Map<string, CarListObject>) {
     const PutRequestObjects: PutRequest[] = carDetailObjects.map((car) => {
-      return this.createPutRequestInput(car, crawledCarListMap.get(car.carInfoMap.CarNumber)!.price);
+      return this.createPutRequestInput(
+        car,
+        crawledCarListMap.get(car.carInfoMap.CarNumber)!.title,
+        crawledCarListMap.get(car.carInfoMap.CarNumber)!.company,
+        crawledCarListMap.get(car.carInfoMap.CarNumber)!.price,
+        );
     });
 
     return await this.dynamoClient.batchPutCars(...PutRequestObjects)
@@ -92,6 +99,7 @@ export class BcarCrawlManager {
 
 
   private async updatePrices(crawledCarListMap: Map<string, CarListObject>) {
+    console.log("Update price start");
     const carListInDatabase = await this.dynamoClient.getAllCars(10)
     const putRequests = carListInDatabase.items.reduce((list, item) => {
       try {
@@ -100,6 +108,7 @@ export class BcarCrawlManager {
         if (item.Price && item.Price.N && item.Price.N == newPrice) {
           return list
         }
+
         item.Price = { N : newPrice }
         list.push({Item: item})
         return list
@@ -132,7 +141,7 @@ export class BcarCrawlManager {
     const pageAmount = await this.carPageAmountCollector.crawl();
     console.log(pageAmount);
 
-    const carListObjects = await this.carListCollector.execute(pageAmount)
+    const carListObjects = await this.carListCollector.crawlCarList(1, pageAmount)
     console.log("carListObjects.length");
     console.log(carListObjects.length);
 
@@ -150,7 +159,7 @@ export class BcarCrawlManager {
     if (carsShouldCrawl.length) {
       // Detail 조회 람다 호출 구간
 
-      const carDetailObjects = await this.carDetailCollector.execute(carsShouldCrawl.slice(0, 1500))
+      const carDetailObjects = await this.carDetailCollector.execute(carsShouldCrawl)
       // 저장 로직: 차량 가격도 저장되어야 한다. 업데이트 로직이 필요할 것
       const saveResponses = await this.saveDatas(carDetailObjects, crawledCarListMap);
       console.log(saveResponses)
@@ -162,6 +171,7 @@ export class BcarCrawlManager {
       console.log("Delete response :");
       console.log(deleteresponses);
     }
+
 
     this.updatePrices(crawledCarListMap)
 

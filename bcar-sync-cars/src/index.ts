@@ -31,8 +31,13 @@ exports.manageBCar = async (
   const lambdaClient = new LambdaClient({ region: DYNAMO_DB_REGION });
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
 
-  const carListCollector = new CarListCollectorLambda(lambdaClient)
+  // const carListCollector = new CarListCollectorLambda(lambdaClient)
   const carDetailCollector = new CarDetailCollectorLambda(lambdaClient)
+
+  const carListCollector = new CarListCollector(
+    carListPageInitializer,
+    carListPageWaiter
+  )
   try {
     await new BcarCrawlManager(
       carPageAmountCrawler,
@@ -103,6 +108,8 @@ exports.crawlBCarList = async (
     carListPageWaiter
   )
   try {
+    console.log(event);
+
     const result = await carListCollector.crawlCarList(
       event.startPage,
       event.endPage,
