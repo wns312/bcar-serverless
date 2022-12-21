@@ -157,25 +157,28 @@ export class BcarCrawlManager {
     }, new Map<string, CarListObject>())
 
     if (carsShouldCrawl.length) {
-      // Detail 조회 람다 호출 구간
+      for (let i = 0; i < carsShouldCrawl.length; i = i + 1000) {
+        console.log(`i = ${i} start (total ${carsShouldCrawl.length})`);
 
-      const carDetailObjects = await this.carDetailCollector.execute(carsShouldCrawl)
-      // 저장 로직: 차량 가격도 저장되어야 한다. 업데이트 로직이 필요할 것
+      // Detail 조회 람다 호출 구간
+      const carDetailObjects = await this.carDetailCollector.execute(
+        carsShouldCrawl.slice(i, i + 1000)
+      )
+
       const saveResponses = await this.saveDatas(carDetailObjects, crawledCarListMap);
       console.log(saveResponses)
+      console.log(`i = ${i} end (total ${carsShouldCrawl.length})`);
+      }
     }
 
-
+    // 삭제에 대한 검증을 추가할 것 (detail 페이지는 항상 존재하므로 검색 count가 0인지 확인하는 방식으로 진행할 것)
     if (carsShouldDelete.length) {
       const deleteresponses = await this.dynamoClient.batchDeleteCar(carsShouldDelete)
       console.log("Delete response :");
       console.log(deleteresponses);
     }
 
-
     this.updatePrices(crawledCarListMap)
 
   }
-
 }
-
