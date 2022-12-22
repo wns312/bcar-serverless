@@ -23,7 +23,7 @@ provider:
 functions:
 
   manageBCar:
-    timeout: 600
+    timeout: 900
     memorySize: 2048
     handler: src/index.manageBCar
     events:
