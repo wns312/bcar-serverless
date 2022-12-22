@@ -1,3 +1,4 @@
+export * from "./CarDetailCollectorLambda"
 export * from "./CarDetailCrawler"
 export * from "./CarListCrawler"
 export * from "./CarListPageInitializer"

@@ -1,0 +1,7 @@
+node_modules
+**/env
+dist
+Dockerfile
+README.md
+bcar
+docker-compose.yml

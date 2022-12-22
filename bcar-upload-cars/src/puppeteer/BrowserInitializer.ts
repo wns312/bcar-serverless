@@ -1,5 +1,4 @@
 import * as puppeteer from "puppeteer"
-import { Browser } from "puppeteer"
 import { Environments } from "../types"
 
 

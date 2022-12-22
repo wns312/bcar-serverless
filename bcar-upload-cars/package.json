@@ -6,9 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "docker compose exec crawler node /app/dist/src/index.js",
-    "start:local": "set -a && source env/.env && source env/local.env && set +a && tsc && node dist/src/index.js",
+    "start:local": "set -a && source env/.env && set +a && tsc && node dist/src/index.js",
     "restart": "npm run build:local && docker compose up -d",
-    "build:local": "docker compose build"
+    "build:local": "docker compose build",
+    "deploy:job:definition": "set -a && source env/.env && source env/aws.env && set +a && tsc && node dist/deploy/aws/JobDefinitionDeployer.js"
   },
   "keywords": [],
   "author": "",
@@ -19,6 +20,7 @@
     "puppeteer": "^19.1.2"
   },
   "devDependencies": {
+    "@aws-sdk/client-batch": "^3.196.0",
     "@types/puppeteer": "^5.4.7"
   }
 }
