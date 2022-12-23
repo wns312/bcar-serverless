@@ -1,13 +1,13 @@
 import { PutRequest } from "@aws-sdk/client-dynamodb";
 import { CategoryCrawler } from "."
 import { CategoryFormatter } from "../utils"
-import { CarManufacturer, CarSegment, Environments } from "../types"
+import { CarManufacturer, CarSegment } from "../types"
 import { DynamoClient } from "../db/dynamo/DynamoClient"
-
+import { AccountSheetClient } from "../sheet/index"
 
 export class CategoryService {
   constructor(
-    private envs: Environments,
+    private sheetClient: AccountSheetClient,
     private categoryCrawler: CategoryCrawler,
     private categoryFormatter: CategoryFormatter,
     private dynamoClient: DynamoClient,
@@ -39,7 +39,14 @@ export class CategoryService {
   }
 
   async collectCategoryInfo() {
-    await this.categoryCrawler.execute()
+    const accounts = await this.sheetClient.getAccounts()
+    const testAccounts = accounts.filter(account => account.isTestAccount)
+    if (!testAccounts.length) {
+      throw new Error("There is no test account");
+    }
+    const { id: testId, pw: testPw } = testAccounts[0]
+
+    await this.categoryCrawler.execute(testId, testPw)
 
     const carManufacturerMap = this.categoryCrawler.carManufacturerMap
     const carSegmentMap = this.categoryCrawler.carSegmentMap

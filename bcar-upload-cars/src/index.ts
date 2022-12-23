@@ -1,13 +1,15 @@
-import { promises as fs } from 'fs';
 import { envs } from "./configs"
 import { BrowserInitializer, CarUploader, CategoryCrawler, CategoryService } from "./puppeteer"
-import { CarBase, CarCategory, CarManufacturer, CarModel, CarDetailModel } from "./types"
-import { DynamoClient } from "./db/dynamo/DynamoClient"
 import { CategoryFormatter } from "./utils"
+import { DynamoClient } from "./db/dynamo/DynamoClient"
+import { AccountSheetClient } from "./sheet/index"
 
 async function updateCars() {
+  const { DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX } = envs
+  const sheetClient = new AccountSheetClient(envs.GOOGLE_CLIENT_EMAIL, envs.GOOGLE_PRIVATE_KEY)
   const initializer = new BrowserInitializer(envs)
-  const carUploader = new CarUploader(initializer, envs)
+  const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const carUploader = new CarUploader(sheetClient, initializer, dynamoClient, envs)
   const browser = await initializer.createBrowser()
 
   try {
@@ -28,11 +30,12 @@ async function updateCars() {
 
 async function crawlCategories() {
   const { DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX } = envs
+  const sheetClient = new AccountSheetClient(envs.GOOGLE_CLIENT_EMAIL, envs.GOOGLE_PRIVATE_KEY)
   const initializer = new BrowserInitializer(envs)
   const crawler = new CategoryCrawler(initializer, envs)
   const formatter = new CategoryFormatter()
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const categoryService = new CategoryService(envs, crawler, formatter, dynamoClient)
+  const categoryService = new CategoryService(sheetClient, crawler, formatter, dynamoClient)
 
 
   try {
@@ -52,18 +55,4 @@ async function crawlCategories() {
 
 
 
-
-// 이렇게 처리해주는 경우 검증해주지는 못한다. 추후 변경
-const argv = process.argv.slice(3).map(arg=>{
-  if (!Number.isNaN(Number(arg))) {
-    return Number(arg)
-  }
-  return arg === 'true' ? 'true' :
-    arg === 'false' ? 'false' :
-      arg === 'undefined' ? 'undefined' :
-        arg === 'null' ? 'null' :
-          `"${arg}"`
-})
-
-
-eval(`${process.argv[2]}(${argv})`)
+eval(`${process.argv[2]}()`)

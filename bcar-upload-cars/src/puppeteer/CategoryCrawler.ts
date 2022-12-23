@@ -156,14 +156,14 @@ export class CategoryCrawler {
     }
   }
 
-  async execute() {
-    const{ BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL, TMP_ID, TMP_PW } = this.envs
+  async execute(id: string, pw: string) {
+    const{ BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL } = this.envs
     const url = BCAR_ANSAN_CROSS_LOGIN_URL! + BCAR_ANSAN_CROSS_CAR_REGISTER_URL!
 
     await this.initializeBrowsers(1)
     const [page] = await this.browserList[0].pages()
 
-    await this.initializer.login(page, url, TMP_ID, TMP_PW)
+    await this.initializer.login(page, url, id, pw)
     await page.waitForSelector(
       "#post-form > div:nth-child(19) > div.photo_view.clearfix > div > span.custom-button-box > label:nth-child(1)"
     )
@@ -183,7 +183,7 @@ export class CategoryCrawler {
       pages.map(page => page.goto(url, { waitUntil: "networkidle2" }))
     )
     await Promise.all(
-      pages.map(page => this.initializer.login(page, url, TMP_ID, TMP_PW))
+      pages.map(page => this.initializer.login(page, url, id, pw))
     )
     await Promise.all(
       pages.map(page => page.waitForSelector(

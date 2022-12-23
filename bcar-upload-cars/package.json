@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-batch": "^3.196.0",
-    "@types/puppeteer": "^5.4.7"
+    "@types/puppeteer": "^5.4.7",
+    "googleapis": "^110.0.0"
   }
 }
