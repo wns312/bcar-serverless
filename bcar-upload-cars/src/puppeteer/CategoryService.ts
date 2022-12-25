@@ -38,15 +38,10 @@ export class CategoryService {
     result.forEach(r => console.log(r))
   }
 
-  async collectCategoryInfo() {
-    const accounts = await this.sheetClient.getAccounts()
-    const testAccounts = accounts.filter(account => account.isTestAccount)
-    if (!testAccounts.length) {
-      throw new Error("There is no test account");
-    }
-    const { id: testId, pw: testPw } = testAccounts[0]
+  async collectCategoryInfo(loginUrl: string, registerUrl: string) {
+    const { id: testId, pw: testPw } = await this.sheetClient.getTestAccount()
 
-    await this.categoryCrawler.execute(testId, testPw)
+    await this.categoryCrawler.execute(testId, testPw, loginUrl, registerUrl)
 
     const carManufacturerMap = this.categoryCrawler.carManufacturerMap
     const carSegmentMap = this.categoryCrawler.carSegmentMap

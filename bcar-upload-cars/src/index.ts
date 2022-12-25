@@ -5,16 +5,27 @@ import { DynamoClient } from "./db/dynamo/DynamoClient"
 import { AccountSheetClient } from "./sheet/index"
 
 async function updateCars() {
-  const { DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX } = envs
-  const sheetClient = new AccountSheetClient(envs.GOOGLE_CLIENT_EMAIL, envs.GOOGLE_PRIVATE_KEY)
-  const initializer = new BrowserInitializer(envs)
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_INDEX,
+    BCAR_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  // 추후 wrapping class가 생길 경우 그 내부로 옮겨질 수 있음.
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const { id: testId, pw: testPw } = await sheetClient.getTestAccount()
+
+  const initializer = new BrowserInitializer(NODE_ENV)
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const carUploader = new CarUploader(sheetClient, initializer, dynamoClient, envs)
-  const browser = await initializer.createBrowser()
+  const carUploader = new CarUploader(initializer, dynamoClient)
 
   try {
-    const page = await browser.newPage()
-    await carUploader.execute(page)
+    await carUploader.execute(testId, testPw, BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.name);
@@ -22,24 +33,32 @@ async function updateCars() {
       console.error(error.stack);
     }
   } finally {
-    await browser.close()
-    console.info("Browser closed");
+    await initializer.closeBrowsers()
   }
 }
 
 
 async function crawlCategories() {
-  const { DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX } = envs
-  const sheetClient = new AccountSheetClient(envs.GOOGLE_CLIENT_EMAIL, envs.GOOGLE_PRIVATE_KEY)
-  const initializer = new BrowserInitializer(envs)
-  const crawler = new CategoryCrawler(initializer, envs)
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_CATEGORY_INDEX,
+    BCAR_CATEGORY_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const initializer = new BrowserInitializer(NODE_ENV)
+  const crawler = new CategoryCrawler(initializer)
   const formatter = new CategoryFormatter()
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
   const categoryService = new CategoryService(sheetClient, crawler, formatter, dynamoClient)
 
-
   try {
-    await categoryService.collectCategoryInfo()
+    await categoryService.collectCategoryInfo(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.name);
@@ -47,12 +66,8 @@ async function crawlCategories() {
       console.error(error.stack);
     }
   } finally {
-    const promiseClosedBrowsers = crawler.browserList.map(browser => browser.close());
-    await Promise.all(promiseClosedBrowsers)
-    console.info(`Total ${promiseClosedBrowsers.length} browser(s) closed`);
+    await initializer.closeBrowsers()
   }
 }
-
-
 
 eval(`${process.argv[2]}()`)

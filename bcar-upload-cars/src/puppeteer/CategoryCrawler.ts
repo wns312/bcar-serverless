@@ -1,10 +1,10 @@
 
-import { Page, Browser } from "puppeteer"
+import { Page } from "puppeteer"
 import { BrowserInitializer } from "."
-import { CarCategory, CarDetailModel, CarManufacturer, CarModel, CarSegment, Environments } from "../types"
+import { CarCategory, CarDetailModel, CarManufacturer, CarModel, CarSegment } from "../types"
 import { delay } from "../utils"
 
-
+// 교차로 로그인 인터페이스를 상속하는 방식으로 login 함수를 다룰 수 있도록 하는것이 바람직해 보임
 export class CategoryCrawler {
   private segmentSelectorPrefix = "#post-form > table:nth-child(10) > tbody > tr:nth-child(1) > td > label"
   private segmentSelectorSuffix = " > input"
@@ -13,12 +13,8 @@ export class CategoryCrawler {
   private detailModelSelector = "#categoryId > dl.ct_c > dd > ul > li"
   private _carSegmentMap = new Map<string, CarSegment>()
   private _carManufacturerMap: CarCategory = new Map<string, CarManufacturer>()
-  private _browserList: Browser[] = []
 
-  constructor(
-    private initializer: BrowserInitializer,
-    private envs: Environments
-  ) {}
+  constructor(private initializer: BrowserInitializer) {}
 
   get carSegmentMap() {
     return this._carSegmentMap
@@ -26,30 +22,12 @@ export class CategoryCrawler {
   get carManufacturerMap() {
     return this._carManufacturerMap
   }
-  get browserList() {
-    return this._browserList
-  }
   private set carSegmentMap(carSegmentMap : Map<string, CarSegment>) {
     this._carSegmentMap = carSegmentMap;
   }
   private set carManufacturerMap(carManufacturerMap : Map<string, CarManufacturer>) {
     this._carManufacturerMap = carManufacturerMap;
   }
-  private set browserList(browserList : Browser[]) {
-    this._browserList = browserList;
-  }
-
-  private async initializeBrowsers(amount: number) {
-    const promisePagesInitialize: Promise<Browser>[] = []
-    for (let i = 0; i < amount; i++) {
-      const browser = this.initializer.createBrowser()
-      promisePagesInitialize.push(browser)
-
-    }
-    const initializedBrowsers = await Promise.all(promisePagesInitialize)
-    this.browserList = this.browserList.concat(initializedBrowsers)
-  }
-
 
   private getTextContentAndDataValue(page: Page, selector: string) {
     return page.$eval(
@@ -156,12 +134,11 @@ export class CategoryCrawler {
     }
   }
 
-  async execute(id: string, pw: string) {
-    const{ BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL } = this.envs
-    const url = BCAR_ANSAN_CROSS_LOGIN_URL! + BCAR_ANSAN_CROSS_CAR_REGISTER_URL!
+  async execute(id: string, pw: string, loginUrl: string, registerUrl: string) {
+    const url = loginUrl! + registerUrl!
 
-    await this.initializeBrowsers(1)
-    const [page] = await this.browserList[0].pages()
+    await this.initializer.initializeBrowsers(1)
+    const [page] = await this.initializer.browserList[0].pages()
 
     await this.initializer.login(page, url, id, pw)
     await page.waitForSelector(
@@ -173,10 +150,10 @@ export class CategoryCrawler {
     console.log(this.carSegmentMap);
     console.log(this.carManufacturerMap);
 
-    await this.initializeBrowsers(this.carSegmentMap.size-1)
+    await this.initializer.initializeBrowsers(this.carSegmentMap.size-1)
 
     // 각 브라우저 페이지 get
-    const pagesList = await Promise.all(this.browserList.map(async browser => await browser.pages()))
+    const pagesList = await Promise.all(this.initializer.browserList.map(async browser => await browser.pages()))
     const pages = pagesList.map(pages=>pages[0])
     // 각 브라우저 로그인
     await Promise.all(

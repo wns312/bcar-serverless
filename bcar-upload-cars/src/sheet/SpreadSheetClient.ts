@@ -48,6 +48,19 @@ export class AccountSheetClient {
     return this.convertAccounts(accountRawList)
   }
 
+  async getTestAccounts() {
+    const accounts = await this.getAccounts()
+    return accounts.filter(account => account.isTestAccount)
+  }
+
+  async getTestAccount() {
+    const testAccounts = await this.getTestAccounts()
+    if (!testAccounts.length) {
+      throw new Error("There is no test account");
+    }
+    return testAccounts[0]
+  }
+
   async appendAccount(id: string, pw: string, isTestAccount: boolean) {
 
     const response = await this.sheets.spreadsheets.values.append({
