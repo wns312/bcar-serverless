@@ -1,7 +1,7 @@
 import { PutRequest } from "@aws-sdk/client-dynamodb";
 import { CategoryCrawler } from "."
-import { CategoryFormatter } from "../utils"
 import { CarManufacturer, CarSegment } from "../types"
+import { CategoryFormatter } from "../utils"
 import { DynamoClient } from "../db/dynamo/DynamoClient"
 import { AccountSheetClient } from "../sheet/index"
 

@@ -1,14 +1,16 @@
 
 import { Page } from "puppeteer"
 import { BrowserInitializer } from "."
-import { CarCategory, CarDetailModel, CarManufacturer, CarModel, CarSegment } from "../types"
+import { CarCategory, CarDetailModel, CarManufacturer, CarModel, CarSegment, ManufacturerOrigin } from "../types"
 import { delay } from "../utils"
 
 // 교차로 로그인 인터페이스를 상속하는 방식으로 login 함수를 다룰 수 있도록 하는것이 바람직해 보임
+// 또한 Nested Map 말고, 어차피 segment, model은 인자로 받아서 들어가므로, 각 map을 따로 만드는것이 좋아보임.. 아닌가?
 export class CategoryCrawler {
   private segmentSelectorPrefix = "#post-form > table:nth-child(10) > tbody > tr:nth-child(1) > td > label"
   private segmentSelectorSuffix = " > input"
   private manufacturerSelector = "#categoryId > dl.ct_a > dd > ul > li"
+  private manufacturerOriginSelector = "#post-form > table:nth-child(10) > tbody > tr:nth-child(2) > td > p > label"
   private modelSelector = "#categoryId > dl.ct_b > dd > ul > li"
   private detailModelSelector = "#categoryId > dl.ct_c > dd > ul > li"
   private _carSegmentMap = new Map<string, CarSegment>()
@@ -37,7 +39,7 @@ export class CategoryCrawler {
   }
 
   // Manufacturer Map 초기화
-  private async createManufacturerMap(page: Page) {
+  private async createDomesticManufacturerMap(page: Page) {
     const textContentSelector = this.segmentSelectorPrefix + ":nth-child(1)"
     const clickselector = textContentSelector + this.segmentSelectorSuffix
     await page.click(clickselector)
@@ -50,6 +52,31 @@ export class CategoryCrawler {
         name: ele[0],
         dataValue: ele[1],
         index: index + 1,
+        origin: ManufacturerOrigin.Domestic,
+        carModelMap: new Map<string, CarModel>()
+      })
+    }, this.carManufacturerMap)
+  }
+
+  // Manufacturer Map 초기화
+  private async createImportedManufacturerMap(page: Page) {
+    const manufacturerOriginSelector = this.manufacturerOriginSelector + ":nth-child(2)"
+    await page.click(manufacturerOriginSelector)
+    const textContentSelector = this.segmentSelectorPrefix + ":nth-child(2)"
+    const clickselector = textContentSelector + this.segmentSelectorSuffix
+    await page.click(clickselector)
+    await page.waitForSelector("#categoryId > dl.ct_a > dd > ul > li")
+
+
+    const manufacturers = await page.$$eval(this.manufacturerSelector, elements => {
+      return elements.map(ele => [ele.textContent!, ele.getAttribute('data-value')!])
+    })
+    this.carManufacturerMap = manufacturers.reduce((map: CarCategory, ele: string[], index: number)=>{
+      return map.set(ele[0], {
+        name: ele[0],
+        dataValue: ele[1],
+        index: index + 1,
+        origin: ManufacturerOrigin.Imported,
         carModelMap: new Map<string, CarModel>()
       })
     }, this.carManufacturerMap)
@@ -146,7 +173,8 @@ export class CategoryCrawler {
     )
 
     await this.createCarSegmentMap(page)
-    await this.createManufacturerMap(page)
+    await this.createDomesticManufacturerMap(page)
+
     console.log(this.carSegmentMap);
     console.log(this.carManufacturerMap);
 
@@ -180,6 +208,7 @@ export class CategoryCrawler {
       )
     }
     await Promise.all(promiseExecutes)
+    await this.createImportedManufacturerMap(page)
     // console.log(this.carManufacturerMap);
 
     // 딜레이
