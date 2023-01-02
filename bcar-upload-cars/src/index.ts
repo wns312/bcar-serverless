@@ -4,7 +4,7 @@ import { CarUploadService } from "./puppeteer"
 import { CategoryFormatter, CarObjectFormatter } from "./utils"
 import { DynamoClient, DynamoCategoryClient } from "./db/dynamo"
 import { AccountSheetClient } from "./sheet/index"
-
+import { request } from "http"
 async function updateCars() {
   const {
     BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
@@ -79,10 +79,34 @@ async function crawlCategories() {
   }
 }
 
+function checkIPAddress() {
+  const options = {
+    host: 'api.ipify.org',
+    port: 80,
+    path: '/?format=json'
+  };
+
+  const req = request(options, (res) => {
+    res.setEncoding('utf8');
+
+    let body = '';
+    res.on('data', (chunk) => {
+      body += chunk;
+    });
+
+    res.on('end', () => {
+      const data = JSON.parse(body);
+      console.log(data.ip);
+    });
+  });
+
+  req.end();
+}
+
 const functionMap = new Map<string, Function>([
   [updateCars.name, updateCars],
   [crawlCategories.name, crawlCategories],
-
+  [checkIPAddress.name, checkIPAddress],
 ])
 
 const fc = functionMap.get(process.argv[2])

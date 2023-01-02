@@ -108,10 +108,7 @@ export class CarUploader {
   static submitInputSelector = "#post-form > div.submit_area > input.cof-btn.cof-btn-large.btn_add"
 
   constructor(
-    private initializer: BrowserInitializer,
     private id: string,
-    private pw: string,
-    private loginUrl: string,
     private registerUrl: string,
     private sources: UploadSource[]
     ) {}
@@ -323,7 +320,7 @@ export class CarUploader {
   }
 
   static async inputCarInformation(page: Page, car: CarDataObject) {
-    console.log(car);
+    // console.log(car);
     // carNumber: 차량번호
     // mileage: 주행거리
     // displacement: 배기량
@@ -462,47 +459,23 @@ export class CarUploader {
     }
   }
 
-  async uploadCars() {
-    await this.initializer.initializeBrowsers(1)
-    const pages = await this.initializer.browserList[0].pages()
-    const page = pages[0]
-    const url = this.loginUrl + this.registerUrl
-    // 차량을 더이상 등록할 수 없는 경우 이벤트 리스너를 통해서 실행을 종료한다.
-    // 이 경우에도 차량 등록 내용을 갱신해주어야 한다.
-    page.on("dialog", async (dialog)=>{
-      await dialog.accept()
-      console.log("실행 완료");
-      throw Error("Cannot register cars anymore")
-    })
-
-    await this.initializer.login(page, url, this.id, this.pw)
-    const rootDir = CarUploader.getImageRootDir(this.id)
-
+  async uploadCars(page: Page) {
     try {
-      await mkdir(rootDir)
-    } catch {
-      console.log("account directory already exist. skip mkdir");
-    }
-
-    try {
-      // const sources = this.sources.splice(20, 220)
       for (const source of this.sources) {
+
         await page.goto(this.registerUrl)
         await page.waitForSelector(CarUploader.formBase)
         await CarUploader.uploadCar(page, this.id, source)
       }
-      await rm(rootDir, { recursive: true, force: true })
     } catch (error) {
       console.error(error);
-    } finally {
-      await rm(rootDir, { recursive: true, force: true })
+      console.log("실행 완료");
+      // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
+      // 이후 타임아웃 에러가 발생하게 된다.
+      // 모두 완료가 되었으면 차량 정보에 대한 DB 갱신이 있어야 한다.
+      // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
+      // dialog에서도 이를 처리해 줄 수 있도록 하자.
+      // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.
     }
-    console.log("실행 완료");
-    // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
-    // 이후 타임아웃 에러가 발생하게 된다.
-    // 모두 완료가 되었으면 차량 정보에 대한 DB 갱신이 있어야 한다.
-    // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
-    // dialog에서도 이를 처리해 줄 수 있도록 하자.
-    // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.
   }
 }
