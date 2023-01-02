@@ -17,11 +17,11 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.196.0",
     "@aws-sdk/client-sns": "^3.196.0",
+    "googleapis": "^110.0.0",
     "puppeteer": "^19.1.2"
   },
   "devDependencies": {
     "@aws-sdk/client-batch": "^3.196.0",
-    "@types/puppeteer": "^5.4.7",
-    "googleapis": "^110.0.0"
+    "@types/puppeteer": "^5.4.7"
   }
 }

@@ -1,6 +1,5 @@
 import { writeFile, mkdir, rm } from "fs/promises"
-import { Page } from "puppeteer"
-import { BrowserInitializer } from "."
+import { ElementHandle, FileChooser, Page, TimeoutError } from "puppeteer"
 import { CarDataObject, ManufacturerOrigin, UploadSource } from "../types"
 import { delay } from "../utils"
 
@@ -306,17 +305,47 @@ export class CarUploader {
     return Promise.all(carImgList.map(carImg=>CarUploader.saveImage(imageDir, carImg)))
   }
 
+  static async getFileChooser(page: Page, retry: number = 1): Promise<FileChooser> {
+    console.log(`try: ${retry}`);
+    try {
+      const [fileChooser] = await Promise.all([
+        page.waitForFileChooser({ timeout: 5000 }),
+        page.click(CarUploader.fileChooserSelector)
+      ])
+      return fileChooser
+    } catch(e) {
+      if (!(e instanceof TimeoutError) || retry >= 5) {
+        throw e
+      }
+    }
+    console.log(`retry: ${retry}`);
+    return await CarUploader.getFileChooser(page, retry + 1)
+  }
+
+  static async waitImageUpload(page: Page, retry: number = 1): Promise<ElementHandle<Element> | null> {
+    try {
+      const result = await page.waitForSelector(CarUploader.fileUploadedPreviewSelector, { timeout: 10000 * retry })
+      return result
+    } catch (e) {
+      if (!(e instanceof TimeoutError) || retry >= 5) {
+        throw e
+      }
+    }
+    console.log(`retry: ${retry}`);
+    return await CarUploader.waitImageUpload(page, retry + 1)
+  }
+
   static async uploadImages(page: Page, dirList: string[]) {
     if (!dirList.length) {
       return null
     }
-    const promiseFileChooser = page.waitForFileChooser()
-    const [fileChooser] = await Promise.all([
-      promiseFileChooser,
-      page.click(CarUploader.fileChooserSelector)
-    ])
+    console.log("fileChooser start");
+    const fileChooser = await CarUploader.getFileChooser(page)
+    console.log("fileChooser end");
     await fileChooser.accept(dirList);
-    return page.waitForSelector(CarUploader.fileUploadedPreviewSelector)
+    console.log("fileChooser.accept end");
+    // 여기가 제대로 동작을 안함. 원인을 파악해야함
+    return CarUploader.waitImageUpload(page)
   }
 
   static async inputCarInformation(page: Page, car: CarDataObject) {
@@ -440,16 +469,18 @@ export class CarUploader {
       // 사진
       await mkdir(imageDir)
       const dirList = await CarUploader.saveImages(imageDir, source.car.carImgList)
-      const uploadImagePromise = CarUploader.uploadImages(page, dirList)
       // form 채우기
       await CarUploader.inputCarInformation(page, source.car)
       // 차량 카테고리 설정
       await CarUploader.categorizeCar(page, source)
       await page.focus(CarUploader.imageRegisterButtonSelector)
-      // 사진 업로드 동안 다른 작업을 처리하고 사진업로드가 완료되면 차량을 등록하기 위함.
-      await uploadImagePromise
+      // 이미지 업로드. 순서상 여기에 안넣으면 따로 delay를 넣어주어야 한다.
+      // 업로드가 씹히기 때문.
+      // 실제 fileChooser까지는 제대로 동작하지만, 실제 업로드 후 waitSelector가 제대로 동작하지 않는다.
+      // 수정이 필요함. (로컬에서는 정상 동작하지만, 실제로는 동작하지 않음)
+      await CarUploader.uploadImages(page, dirList)
       await page.click(CarUploader.submitInputSelector)
-      await page.waitForNavigation({waitUntil: 'networkidle2'})
+      await page.waitForNavigation({waitUntil: "load"})
     } catch (error) {
       console.error("차량 등록에 실패했습니다.");
       console.error(error);
@@ -462,8 +493,9 @@ export class CarUploader {
   async uploadCars(page: Page) {
     try {
       for (const source of this.sources) {
+        console.log(source.car.carNumber);
 
-        await page.goto(this.registerUrl)
+        await page.goto(this.registerUrl, { waitUntil: "networkidle2"})
         await page.waitForSelector(CarUploader.formBase)
         await CarUploader.uploadCar(page, this.id, source)
       }

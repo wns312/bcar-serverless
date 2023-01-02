@@ -131,11 +131,17 @@ export class CarUploadService {
     }
   }
 
-  async uploadCars(loginUrl: string, registerUrl: string) {
+  async uploadCars(
+    loginUrl: string,
+    registerUrl: string,
+    workerAmount: number,
+    carAmount: number,
+  ) {
     console.log("차량 DB 조회 시작"); // 여기가 되게 오래 걸림
-    // const result = await this.dynamoCarClient.getSomeCars()
-    const result = await this.dynamoCarClient.getAllCars(10)
-
+    const result = await this.dynamoCarClient.getSomeCars()
+    // let result = await this.dynamoCarClient.getAllCars(10)
+    result.count = carAmount
+    result.items = result.items.slice(0, carAmount)
     console.log("차량 객체 생성 시작");
     const cars = this.formatter.createCarObject(result.items)
 
@@ -162,7 +168,6 @@ export class CarUploadService {
     // 2. 로컬테스트에서는 과도한 worker를 사용해야 한다
     // 3. 결국 하나의 batch에서 3~5개의 worker만 사용하는 것이 바람직하다.
     // id 자체가 중요한 것은 아님. ip당 트래픽이 가장 중요함
-    const workerAmount = 5
     const url = loginUrl + registerUrl
     await this.initializer.initializeBrowsers(workerAmount)
 

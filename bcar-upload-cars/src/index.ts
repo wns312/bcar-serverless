@@ -1,10 +1,57 @@
 import { envs } from "./configs"
-import { BrowserInitializer, CarUploader, CategoryCrawler, CategoryService } from "./puppeteer"
+import { BrowserInitializer, CategoryCrawler, CategoryService } from "./puppeteer"
 import { CarUploadService } from "./puppeteer"
 import { CategoryFormatter, CarObjectFormatter } from "./utils"
 import { DynamoClient, DynamoCategoryClient } from "./db/dynamo"
 import { AccountSheetClient } from "./sheet/index"
 import { request } from "http"
+
+async function testUpdateCars() {
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_CATEGORY_INDEX,
+    BCAR_CATEGORY_TABLE,
+    BCAR_INDEX,
+    BCAR_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
+  const formatter = new CarObjectFormatter()
+  const initializer = new BrowserInitializer(NODE_ENV)
+
+  const carUploadService = new CarUploadService(
+    sheetClient,
+    dynamoCarClient,
+    dynamoCategoryClient,
+    formatter,
+    initializer
+  )
+
+  try {
+    await carUploadService.uploadCars(
+      BCAR_ANSAN_CROSS_LOGIN_URL,
+      BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+      1,
+      20,
+    )
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.name);
+      console.error(error.message);
+      console.error(error.stack);
+    }
+  } finally {
+    await initializer.closeBrowsers()
+  }
+}
+
 async function updateCars() {
   const {
     BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
@@ -34,7 +81,12 @@ async function updateCars() {
   )
 
   try {
-    await carUploadService.uploadCars(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)
+    await carUploadService.uploadCars(
+      BCAR_ANSAN_CROSS_LOGIN_URL,
+      BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+      3,
+      10000
+    )
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.name);
@@ -104,6 +156,7 @@ function checkIPAddress() {
 }
 
 const functionMap = new Map<string, Function>([
+  [testUpdateCars.name, testUpdateCars],
   [updateCars.name, updateCars],
   [crawlCategories.name, crawlCategories],
   [checkIPAddress.name, checkIPAddress],
