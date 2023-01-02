@@ -59,7 +59,7 @@ const registerCommand = new RegisterJobDefinitionCommand({
       name,
       value: name === 'NODE_ENV' ? "prod" : value
     })),
-    command: ["echo", "helloworld"],
+    command: ["node","/app/dist/src/index.js","checkIPAddress"],
   }
 });
 
