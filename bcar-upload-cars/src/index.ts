@@ -79,4 +79,21 @@ async function crawlCategories() {
   }
 }
 
-eval(`${process.argv[2]}()`)
+const functionMap = new Map<string, Function>([
+  [updateCars.name, updateCars],
+  [crawlCategories.name, crawlCategories],
+
+])
+
+const fc = functionMap.get(process.argv[2])
+
+if (!fc) {
+  console.error("[Function list]");
+  console.error("--------------------------------");
+  console.error(Array.from(functionMap.keys()).join("\n"));
+  console.error("--------------------------------\n");
+  console.error();
+  throw new Error("There is not matched function");
+}
+
+fc()
