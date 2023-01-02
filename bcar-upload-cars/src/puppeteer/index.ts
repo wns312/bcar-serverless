@@ -1,4 +1,6 @@
 export * from "./BrowserInitializer"
+export * from "./CarClassifier"
 export * from "./CarUploader"
+export * from "./CarUploadService"
 export * from "./CategoryCrawler"
 export * from "./CategoryService"

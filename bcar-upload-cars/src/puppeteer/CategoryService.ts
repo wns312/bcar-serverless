@@ -1,13 +1,13 @@
 import { PutRequest } from "@aws-sdk/client-dynamodb";
 import { CategoryCrawler } from "."
+import { CarManufacturer, CarSegment } from "../types"
 import { CategoryFormatter } from "../utils"
-import { CarManufacturer, CarSegment, Environments } from "../types"
 import { DynamoClient } from "../db/dynamo/DynamoClient"
-
+import { AccountSheetClient } from "../sheet/index"
 
 export class CategoryService {
   constructor(
-    private envs: Environments,
+    private sheetClient: AccountSheetClient,
     private categoryCrawler: CategoryCrawler,
     private categoryFormatter: CategoryFormatter,
     private dynamoClient: DynamoClient,
@@ -38,8 +38,10 @@ export class CategoryService {
     result.forEach(r => console.log(r))
   }
 
-  async collectCategoryInfo() {
-    await this.categoryCrawler.execute()
+  async collectCategoryInfo(loginUrl: string, registerUrl: string) {
+    const { id: testId, pw: testPw } = await this.sheetClient.getTestAccount()
+
+    await this.categoryCrawler.execute(testId, testPw, loginUrl, registerUrl)
 
     const carManufacturerMap = this.categoryCrawler.carManufacturerMap
     const carSegmentMap = this.categoryCrawler.carSegmentMap

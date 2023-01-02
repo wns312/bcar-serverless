@@ -1,18 +1,46 @@
-import { promises as fs } from 'fs';
 import { envs } from "./configs"
-import { BrowserInitializer, CarUploader, CategoryCrawler, CategoryService } from "./puppeteer"
-import { CarBase, CarCategory, CarManufacturer, CarModel, CarDetailModel } from "./types"
-import { DynamoClient } from "./db/dynamo/DynamoClient"
-import { CategoryFormatter } from "./utils"
+import { BrowserInitializer, CategoryCrawler, CategoryService } from "./puppeteer"
+import { CarUploadService } from "./puppeteer"
+import { CategoryFormatter, CarObjectFormatter } from "./utils"
+import { DynamoClient, DynamoCategoryClient } from "./db/dynamo"
+import { AccountSheetClient } from "./sheet/index"
+import { request } from "http"
 
-async function updateCars() {
-  const initializer = new BrowserInitializer(envs)
-  const carUploader = new CarUploader(initializer, envs)
-  const browser = await initializer.createBrowser()
+async function testUpdateCars() {
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_CATEGORY_INDEX,
+    BCAR_CATEGORY_TABLE,
+    BCAR_INDEX,
+    BCAR_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
+  const formatter = new CarObjectFormatter()
+  const initializer = new BrowserInitializer(NODE_ENV)
+
+  const carUploadService = new CarUploadService(
+    sheetClient,
+    dynamoCarClient,
+    dynamoCategoryClient,
+    formatter,
+    initializer
+  )
 
   try {
-    const page = await browser.newPage()
-    await carUploader.execute(page)
+    await carUploadService.uploadCars(
+      BCAR_ANSAN_CROSS_LOGIN_URL,
+      BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+      1,
+      20,
+    )
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.name);
@@ -20,23 +48,78 @@ async function updateCars() {
       console.error(error.stack);
     }
   } finally {
-    await browser.close()
-    console.info("Browser closed");
+    await initializer.closeBrowsers()
+  }
+}
+
+async function updateCars() {
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_CATEGORY_INDEX,
+    BCAR_CATEGORY_TABLE,
+    BCAR_INDEX,
+    BCAR_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
+  const formatter = new CarObjectFormatter()
+  const initializer = new BrowserInitializer(NODE_ENV)
+
+  const carUploadService = new CarUploadService(
+    sheetClient,
+    dynamoCarClient,
+    dynamoCategoryClient,
+    formatter,
+    initializer
+  )
+
+  try {
+    await carUploadService.uploadCars(
+      BCAR_ANSAN_CROSS_LOGIN_URL,
+      BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+      3,
+      10000
+    )
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.name);
+      console.error(error.message);
+      console.error(error.stack);
+    }
+  } finally {
+    await initializer.closeBrowsers()
   }
 }
 
 
 async function crawlCategories() {
-  const { DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX } = envs
-  const initializer = new BrowserInitializer(envs)
-  const crawler = new CategoryCrawler(initializer, envs)
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_CATEGORY_INDEX,
+    BCAR_CATEGORY_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const initializer = new BrowserInitializer(NODE_ENV)
+  const crawler = new CategoryCrawler(initializer)
   const formatter = new CategoryFormatter()
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const categoryService = new CategoryService(envs, crawler, formatter, dynamoClient)
-
+  const categoryService = new CategoryService(sheetClient, crawler, formatter, dynamoClient)
 
   try {
-    await categoryService.collectCategoryInfo()
+    await categoryService.collectCategoryInfo(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)
   } catch (error) {
     if (error instanceof Error) {
       console.error(error.name);
@@ -44,26 +127,50 @@ async function crawlCategories() {
       console.error(error.stack);
     }
   } finally {
-    const promiseClosedBrowsers = crawler.browserList.map(browser => browser.close());
-    await Promise.all(promiseClosedBrowsers)
-    console.info(`Total ${promiseClosedBrowsers.length} browser(s) closed`);
+    await initializer.closeBrowsers()
   }
 }
 
+function checkIPAddress() {
+  const options = {
+    host: 'api.ipify.org',
+    port: 80,
+    path: '/?format=json'
+  };
 
+  const req = request(options, (res) => {
+    res.setEncoding('utf8');
 
+    let body = '';
+    res.on('data', (chunk) => {
+      body += chunk;
+    });
 
-// 이렇게 처리해주는 경우 검증해주지는 못한다. 추후 변경
-const argv = process.argv.slice(3).map(arg=>{
-  if (!Number.isNaN(Number(arg))) {
-    return Number(arg)
-  }
-  return arg === 'true' ? 'true' :
-    arg === 'false' ? 'false' :
-      arg === 'undefined' ? 'undefined' :
-        arg === 'null' ? 'null' :
-          `"${arg}"`
-})
+    res.on('end', () => {
+      const data = JSON.parse(body);
+      console.log(data.ip);
+    });
+  });
 
+  req.end();
+}
 
-eval(`${process.argv[2]}(${argv})`)
+const functionMap = new Map<string, Function>([
+  [testUpdateCars.name, testUpdateCars],
+  [updateCars.name, updateCars],
+  [crawlCategories.name, crawlCategories],
+  [checkIPAddress.name, checkIPAddress],
+])
+
+const fc = functionMap.get(process.argv[2])
+
+if (!fc) {
+  console.error("[Function list]");
+  console.error("--------------------------------");
+  console.error(Array.from(functionMap.keys()).join("\n"));
+  console.error("--------------------------------\n");
+  console.error();
+  throw new Error("There is not matched function");
+}
+
+fc()
