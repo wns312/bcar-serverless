@@ -5,13 +5,15 @@ shift
 
 case $COMMAND in
   deploy:img)
-    set -a && source env/.env && source env/prod.env && source env/aws.env && set +a   # env file import
+    set -a && source env/.env && source env/aws.env && set +a   # env file import
     if [[ -z $TAG_NAME ]]; then
       echo "No tag name. check env"
       exit 1
     fi
 
-    docker buildx build --platform=linux/amd64 -t bcar-deploy-img .   # build for deploy
+    tsc
+
+    docker buildx build -f Dockerfile.amd64 --platform=linux/amd64 -t bcar-deploy-img .   # build for deploy
 
     DOCKER_IMAGE_ID=$(docker images -q bcar-deploy-img)
     DOCKER_IMAGE_TAG=${PRIVATE_REGISTRY_BASE_URL}/${PRIVATE_REGISTRY_PATH}:${TAG_NAME} # create additional envs
@@ -27,9 +29,7 @@ case $COMMAND in
       exit 1
     fi
     gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/.env
-    gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/prod.env
     gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/aws.env
-    # gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase=$PASSPHRASE env/local.env
     ;;
   import:env)
     PASSPHRASE=$1
@@ -38,9 +38,7 @@ case $COMMAND in
       exit 1
     fi
     gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/.env env/.env.gpg
-    gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/prod.env env/prod.env.gpg
     gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/aws.env env/aws.env.gpg
-    # gpg --batch --yes --decrypt --passphrase=$PASSPHRASE --output env/local.env env/local.env.gpg
     ;;
   *)
     echo "Invalid comand '$COMMAND'"

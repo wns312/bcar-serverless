@@ -1,3 +1,4 @@
+import { mkdir, rm } from "fs/promises"
 import { envs } from "./configs"
 import { BrowserInitializer, CategoryCrawler, CategoryService } from "./puppeteer"
 import { CarUploadService } from "./puppeteer"
@@ -7,6 +8,7 @@ import { AccountSheetClient } from "./sheet/index"
 import { request } from "http"
 
 async function testUpdateCars() {
+  await rm('./images/*', { recursive: true, force: true })
   const {
     BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
     BCAR_ANSAN_CROSS_LOGIN_URL,
@@ -39,7 +41,7 @@ async function testUpdateCars() {
       BCAR_ANSAN_CROSS_LOGIN_URL,
       BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
       1,
-      20,
+      2,
     )
   } catch (error) {
     if (error instanceof Error) {
@@ -50,6 +52,8 @@ async function testUpdateCars() {
   } finally {
     await initializer.closeBrowsers()
   }
+  console.log("End execution");
+
 }
 
 async function updateCars() {

@@ -4,11 +4,15 @@
   "description": "BCar update package",
   "main": "dist/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "docker compose exec crawler node /app/dist/src/index.js",
-    "start:local": "set -a && source env/.env && set +a && tsc && node dist/src/index.js",
-    "restart": "npm run build:local && docker compose up -d",
-    "build:local": "docker compose build",
+    "start": "docker compose exec crawler-arm64 node /app/dist/src/index.js",
+    "start:amd64": "docker compose exec crawler-amd64 node /app/dist/src/index.js",
+    "start:local": "set -a && source env/.env && set +a && node dist/src/index.js",
+    "build": "tsc && docker compose build crawler-arm64",
+    "build:amd64": "tsc && docker compose build  crawler-amd64",
+    "build:all": "tsc && docker compose build",
+    "container": "docker compose up crawler-arm64 -d",
+    "container:amd64": "docker compose up crawler-amd64 -d",
+    "container:all": "docker compose up -d",
     "deploy:job:definition": "set -a && source env/.env && source env/aws.env && set +a && tsc && node dist/deploy/aws/JobDefinitionDeployer.js"
   },
   "keywords": [],
@@ -18,7 +22,7 @@
     "@aws-sdk/client-dynamodb": "^3.196.0",
     "@aws-sdk/client-sns": "^3.196.0",
     "googleapis": "^110.0.0",
-    "puppeteer": "^19.1.2"
+    "puppeteer": "^19.4.1"
   },
   "devDependencies": {
     "@aws-sdk/client-batch": "^3.196.0",
