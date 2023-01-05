@@ -5,7 +5,7 @@ import { BrowserInitializer, CategoryCrawler, CategoryService, UploadedCarSyncSe
 import { CarUploadService } from "./puppeteer"
 import { CategoryFormatter, CarObjectFormatter, UploadedCarFormatter } from "./utils"
 import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db/dynamo"
-import { AccountSheetClient } from "./sheet/index"
+import { AccountSheetClient } from "./sheet"
 
 async function syncUpdatedCars() {
   const {
@@ -19,9 +19,11 @@ async function syncUpdatedCars() {
     NODE_ENV,
   } = envs
 
+  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const initializer = new BrowserInitializer(NODE_ENV)
-  const syncService = new UploadedCarSyncService(dynamoUploadedCarClient, initializer)
+  const syncService = new UploadedCarSyncService(dynamoCarClient, dynamoUploadedCarClient, sheetClient, initializer)
   await syncService.execute()
 }
 
