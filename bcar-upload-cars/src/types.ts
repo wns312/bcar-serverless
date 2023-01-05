@@ -80,3 +80,8 @@ export interface UploadSource {
   carModel?: CarBase
   carDetailModel?: CarBase
 }
+
+export interface Base64Image {
+  base64: string
+  ext: string
+}

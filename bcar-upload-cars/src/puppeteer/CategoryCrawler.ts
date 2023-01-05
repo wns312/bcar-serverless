@@ -165,7 +165,7 @@ export class CategoryCrawler {
     const url = loginUrl! + registerUrl!
 
     await this.initializer.initializeBrowsers(1)
-    const [page] = await this.initializer.browserList[0].pages()
+    const page = await this.initializer.pageList[0]
 
     await this.initializer.login(page, url, id, pw)
     await page.waitForSelector(
@@ -179,10 +179,8 @@ export class CategoryCrawler {
     console.log(this.carManufacturerMap);
 
     await this.initializer.initializeBrowsers(this.carSegmentMap.size-1)
-
+    const pages = this.initializer.pageList
     // 각 브라우저 페이지 get
-    const pagesList = await Promise.all(this.initializer.browserList.map(async browser => await browser.pages()))
-    const pages = pagesList.map(pages=>pages[0])
     // 각 브라우저 로그인
     await Promise.all(
       pages.map(page => page.goto(url, { waitUntil: "networkidle2" }))

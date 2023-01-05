@@ -1,6 +1,6 @@
-import { writeFile, mkdir, rm } from "fs/promises"
-import { ElementHandle, FileChooser, Page, TimeoutError } from "puppeteer"
-import { CarDataObject, ManufacturerOrigin, UploadSource } from "../types"
+import { writeFile, mkdir, rm, readFile } from "fs/promises"
+import { ElementHandle, Page, TimeoutError } from "puppeteer"
+import { CarDataObject, ManufacturerOrigin, UploadSource, Base64Image } from "../types"
 import { delay } from "../utils"
 
 // 이 클래스의 인스턴스가 할 일은
@@ -8,142 +8,126 @@ import { delay } from "../utils"
 // 2. 자신에게 부족한 차량의 개수를 리턴하는 것 (필요한 만큼의 차량을 인자로 받을 수 있도록? 또는 리스트를 받아 하나씩 pop 할수도 있음. 이건 문제가 될 수 있음. 보류)
 // 3. 자신이 새로 등록한 차량의 목록을 리턴하는 것. 또는 자신이 등록한 모든 차량의 목록을 리턴하는 것 (이렇게 하면 새로 조회해서 갱신해줄 수 있음)
 
-export class CarUploader {
+export class CarUploaderSelector {
+  private constructor() { }
+
   static formBase = "#post-form > table:nth-child(10) > tbody > tr"
   // static registerPageWaitSelector = "#post-form > div:nth-child(19) > div.photo_view.clearfix > div > span.custom-button-box > label:nth-child(1)"
 
   // Car Categorize related
-  static originSelectorBase =  CarUploader.formBase + ":nth-child(2) > td > p > label"
-  static domesticSelector = CarUploader.originSelectorBase + ":nth-child(1)"
-  static importedSelector = CarUploader.originSelectorBase + ":nth-child(2)"
+  static originSelectorBase =  CarUploaderSelector.formBase + ":nth-child(2) > td > p > label"
+  static domesticSelector = CarUploaderSelector.originSelectorBase + ":nth-child(1)"
+  static importedSelector = CarUploaderSelector.originSelectorBase + ":nth-child(2)"
 
-  static segmentBase =  CarUploader.formBase + ":nth-child(1) > td > label"
-  static segmentSmallSelector = CarUploader.segmentBase + ":nth-child(1)"
-  static segmentMediumSelector = CarUploader.segmentBase + ":nth-child(2)"
-  static segmentLargeSelector = CarUploader.segmentBase + ":nth-child(3)"
-  static segmentSportCarSelector = CarUploader.segmentBase + ":nth-child(4)"
-  static segmentRecreationalSelector = CarUploader.segmentBase + ":nth-child(5)"
-  static segmentVanSelector = CarUploader.segmentBase + ":nth-child(6)"
-  static segmentBusAndTruckSelector = CarUploader.segmentBase + ":nth-child(7)"
+  static segmentBase =  CarUploaderSelector.formBase + ":nth-child(1) > td > label"
+  static segmentSmallSelector = CarUploaderSelector.segmentBase + ":nth-child(1)"
+  static segmentMediumSelector = CarUploaderSelector.segmentBase + ":nth-child(2)"
+  static segmentLargeSelector = CarUploaderSelector.segmentBase + ":nth-child(3)"
+  static segmentSportCarSelector = CarUploaderSelector.segmentBase + ":nth-child(4)"
+  static segmentRecreationalSelector = CarUploaderSelector.segmentBase + ":nth-child(5)"
+  static segmentVanSelector = CarUploaderSelector.segmentBase + ":nth-child(6)"
+  static segmentBusAndTruckSelector = CarUploaderSelector.segmentBase + ":nth-child(7)"
 
   static companyBase = "#categoryId > dl.ct_a > dd > ul > li"
-  static companyDataValueBase = CarUploader.companyBase + ".cateid-"
+  static companyDataValueBase = CarUploaderSelector.companyBase + ".cateid-"
 
   static modelBase = "#categoryId > dl.ct_b > dd > ul > li"
-  static modelDataValueBase = CarUploader.modelBase + ".cateid-"
+  static modelDataValueBase = CarUploaderSelector.modelBase + ".cateid-"
 
   static detailModelBase = "#categoryId > dl.ct_c > dd > ul > li"
-  static detailModelDataValueBase = CarUploader.detailModelBase + ".cateid-"
+  static detailModelDataValueBase = CarUploaderSelector.detailModelBase + ".cateid-"
 
   static modelNameInputSelector = "#model-name-display > input"
 
   // Car Information related
-  static carNumberInputSelector =  CarUploader.formBase + ":nth-child(7) > td > input"
+  static carNumberInputSelector =  CarUploaderSelector.formBase + ":nth-child(7) > td > input"
 
-  static modelYearSelector =  CarUploader.formBase + ":nth-child(8) > td > select.cof-select.cof-select-year.cof-form.cof-select-done"
-  static modelMonthSelector =  CarUploader.formBase + ":nth-child(8) > td > select.cof-select.cof-select-month.cof-form.cof-select-done"
+  static modelYearSelector =  CarUploaderSelector.formBase + ":nth-child(8) > td > select.cof-select.cof-select-year.cof-form.cof-select-done"
+  static modelMonthSelector =  CarUploaderSelector.formBase + ":nth-child(8) > td > select.cof-select.cof-select-month.cof-form.cof-select-done"
 
-  static mileageInputSelector =  CarUploader.formBase + ":nth-child(9) > td > input"
-  static displacementInputSelector =  CarUploader.formBase + ":nth-child(11) > td > input"
-  static fuelTypeSelector = CarUploader.formBase + ":nth-child(13) > td > select"
-  static priceInputSelector =  CarUploader.formBase + ":nth-child(19) > td > input"
+  static mileageInputSelector =  CarUploaderSelector.formBase + ":nth-child(9) > td > input"
+  static displacementInputSelector =  CarUploaderSelector.formBase + ":nth-child(11) > td > input"
+  static fuelTypeSelector = CarUploaderSelector.formBase + ":nth-child(13) > td > select"
+  static priceInputSelector =  CarUploaderSelector.formBase + ":nth-child(19) > td > input"
 
   // gearBox
-  static gearboxAutoSelector = CarUploader.formBase + ":nth-child(10) > td > label:nth-child(1)"
-  static gearboxManualSelector = CarUploader.formBase + ":nth-child(10) > td > label:nth-child(2)"
-  static gearboxCvtSelector = CarUploader.formBase + ":nth-child(10) > td > label:nth-child(3)"
-  static gearboxSemiAutoSelector = CarUploader.formBase + ":nth-child(10) > td > label:nth-child(4)"
+  static gearboxAutoSelector = CarUploaderSelector.formBase + ":nth-child(10) > td > label:nth-child(1)"
+  static gearboxManualSelector = CarUploaderSelector.formBase + ":nth-child(10) > td > label:nth-child(2)"
+  static gearboxCvtSelector = CarUploaderSelector.formBase + ":nth-child(10) > td > label:nth-child(3)"
+  static gearboxSemiAutoSelector = CarUploaderSelector.formBase + ":nth-child(10) > td > label:nth-child(4)"
 
   // hasAccident
-  static hasAccidentTrueSelector = CarUploader.formBase + ":nth-child(16) > td > label:nth-child(1)"
-  static hasAccidentFalseSelector = CarUploader.formBase + ":nth-child(16) > td > label:nth-child(2)"
+  static hasAccidentTrueSelector = CarUploaderSelector.formBase + ":nth-child(16) > td > label:nth-child(1)"
+  static hasAccidentFalseSelector = CarUploaderSelector.formBase + ":nth-child(16) > td > label:nth-child(2)"
   static hasAccidentTextareaSelector = "#accident-display > textarea"
   // Seizure Mortgage
   static seizureMortgageBase = "#post-form > table:nth-child(15) > tbody > tr"
-  static hasSeizureFalseSelector = CarUploader.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(1)"
-  static hasSeizureTrueSelector = CarUploader.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(2)"
-  static hasMortgageFalseSelector = CarUploader.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(1)"
-  static hasMortgageTrueSelector = CarUploader.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(2)"
-  // static hasSeizureNullSelector = CarUploader.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(3)"
-  // static hasMortgageNullSelector = CarUploader.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(3)"
+  static hasSeizureFalseSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(1)"
+  static hasSeizureTrueSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(2)"
+  static hasMortgageFalseSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(1)"
+  static hasMortgageTrueSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(2)"
+  // static hasSeizureNullSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(1) > td > label:nth-child(3)"
+  // static hasMortgageNullSelector = CarUploaderSelector.seizureMortgageBase + ":nth-child(2) > td > label:nth-child(3)"
 
   // color
   static colorSelectSelector = "#carColorItem_title"
   static colorItemSelectSelector = "#carColorItem_child > ul"
   static colorChildBaseSelector = "#carColorItem_child > ul > li"
-  static colorChoiceSelector = CarUploader.colorChildBaseSelector + ":nth-child(1)" // 선택
-  static colorBlackSelector = CarUploader.colorChildBaseSelector + ":nth-child(2)" // 검정
-  static colorRatSelector = CarUploader.colorChildBaseSelector + ":nth-child(3)" // 쥐
-  static colorSilverSelector = CarUploader.colorChildBaseSelector + ":nth-child(4)" // 은
-  static colorSilverGreySelector = CarUploader.colorChildBaseSelector + ":nth-child(5)" // 은회
-  static colorWhiteSelector = CarUploader.colorChildBaseSelector + ":nth-child(6)" // 흰
-  static colorPearlSelector = CarUploader.colorChildBaseSelector + ":nth-child(7)" // 진주
-  static colorGalaxySelector = CarUploader.colorChildBaseSelector + ":nth-child(8)" // 은하
-  // CarUploader.colorChildBaseSelector + ":nth-child(9)" // 명은
-  // CarUploader.colorChildBaseSelector + ":nth-child(10)" // 갈대
-  // CarUploader.colorChildBaseSelector + ":nth-child(11)" // 연금
-  static colorBrownSelector = CarUploader.colorChildBaseSelector + ":nth-child(12)" // 갈
-  static colorGoldSelector = CarUploader.colorChildBaseSelector + ":nth-child(13)" // 금
-  static colorBlueSelector = CarUploader.colorChildBaseSelector + ":nth-child(14)" // 청
-  static colorSkySelector = CarUploader.colorChildBaseSelector + ":nth-child(15)" // 하늘
-  // CarUploader.colorChildBaseSelector + ":nth-child(16)" // 담녹
-  static colorGreenSelector = CarUploader.colorChildBaseSelector + ":nth-child(17)" // 녹
-  static colorPeaGreenSelector = CarUploader.colorChildBaseSelector + ":nth-child(18)" // 연두
-  static colorEmeraldSelector = CarUploader.colorChildBaseSelector + ":nth-child(19)" // 청옥
-  static colorRedSelector = CarUploader.colorChildBaseSelector + ":nth-child(20)" // 빨간
-  static colorOrangeSelector = CarUploader.colorChildBaseSelector + ":nth-child(21)" // 주황
-  // static colorPurpleSelector = CarUploader.colorChildBaseSelector + ":nth-child(22)" // 자주
-  static colorVioletSelector =  CarUploader.colorChildBaseSelector + ":nth-child(23)" // 보라
-  static colorPinkSelector = CarUploader.colorChildBaseSelector + ":nth-child(24)" // 분홍
-  static colorYellowSelector = CarUploader.colorChildBaseSelector + ":nth-child(25)" // 노랑
-  static colorEtcSelector =  CarUploader.colorChildBaseSelector + ":nth-child(26)" // 기타
+  static colorChoiceSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(1)" // 선택
+  static colorBlackSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(2)" // 검정
+  static colorRatSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(3)" // 쥐
+  static colorSilverSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(4)" // 은
+  static colorSilverGreySelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(5)" // 은회
+  static colorWhiteSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(6)" // 흰
+  static colorPearlSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(7)" // 진주
+  static colorGalaxySelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(8)" // 은하
+  // CarUploaderSelector.colorChildBaseSelector + ":nth-child(9)" // 명은
+  // CarUploaderSelector.colorChildBaseSelector + ":nth-child(10)" // 갈대
+  // CarUploaderSelector.colorChildBaseSelector + ":nth-child(11)" // 연금
+  static colorBrownSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(12)" // 갈
+  static colorGoldSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(13)" // 금
+  static colorBlueSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(14)" // 청
+  static colorSkySelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(15)" // 하늘
+  // CarUploaderSelector.colorChildBaseSelector + ":nth-child(16)" // 담녹
+  static colorGreenSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(17)" // 녹
+  static colorPeaGreenSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(18)" // 연두
+  static colorEmeraldSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(19)" // 청옥
+  static colorRedSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(20)" // 빨간
+  static colorOrangeSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(21)" // 주황
+  // static colorPurpleSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(22)" // 자주
+  static colorVioletSelector =  CarUploaderSelector.colorChildBaseSelector + ":nth-child(23)" // 보라
+  static colorPinkSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(24)" // 분홍
+  static colorYellowSelector = CarUploaderSelector.colorChildBaseSelector + ":nth-child(25)" // 노랑
+  static colorEtcSelector =  CarUploaderSelector.colorChildBaseSelector + ":nth-child(26)" // 기타
   static colorEtcInputSelector = "#color-etc-display > input"
 
   // file
   static fileChooserSelector = "#post-form > div:nth-child(19) > div.photo_view.clearfix > div > span.custom-button-box > label:nth-child(1)"
   static imageRegisterButtonSelector = "#post-form > div:nth-child(21) > div.photo_view.clearfix > div > span.custom-button-box > label:nth-child(1)"
-  static fileUploadedPreviewSelector = "#post-form > div:nth-child(19) > div.photo_view.clearfix > div > ul > li.ui-state-default.picture_first > span"
+  static fileUploadedPreviewSelector = "#post-form > div:nth-child(19) > div.photo_view.clearfix > div > ul > li:nth-child(1) > img"
   // sumbmit input
   static submitInputSelector = "#post-form > div.submit_area > input.cof-btn.cof-btn-large.btn_add"
 
-  constructor(
-    private id: string,
-    private registerUrl: string,
-    private sources: UploadSource[]
-    ) {}
-
-  static getImageRootDir(id: string) {
-    return `./images/${id}`
-  }
-
-  static getImageDir(id: string, carNumber: string) {
-    return CarUploader.getImageRootDir(id) +`/${carNumber}`
-  }
-
-  static getImagePath(id: string, carNumber: string, imageName: string) {
-    return CarUploader.getImageDir(id, carNumber) + imageName
-  }
-
   static getOriginSelector(origin: ManufacturerOrigin) {
-    return origin === ManufacturerOrigin.Domestic ? CarUploader.domesticSelector : CarUploader.importedSelector
+    return origin === ManufacturerOrigin.Domestic ? CarUploaderSelector.domesticSelector : CarUploaderSelector.importedSelector
   }
 
   static getSegmentSelector(segmentName: string) {
     switch (segmentName) {
       case "경소형":
-        return CarUploader.segmentSmallSelector
+        return CarUploaderSelector.segmentSmallSelector
       case "준중형":
-        return CarUploader.segmentMediumSelector
+        return CarUploaderSelector.segmentMediumSelector
       case "중대형":
-        return CarUploader.segmentLargeSelector
+        return CarUploaderSelector.segmentLargeSelector
       case "스포츠카":
-        return CarUploader.segmentSportCarSelector
+        return CarUploaderSelector.segmentSportCarSelector
       case "SUV/RV":
-        return CarUploader.segmentRecreationalSelector
+        return CarUploaderSelector.segmentRecreationalSelector
       case "승합":
-        return CarUploader.segmentVanSelector
+        return CarUploaderSelector.segmentVanSelector
       case "화물/버스":
-        return CarUploader.segmentBusAndTruckSelector
+        return CarUploaderSelector.segmentBusAndTruckSelector
       default:
         throw new Error("No proper segment");
     }
@@ -183,15 +167,15 @@ export class CarUploader {
   static getGearType(gearType: string) {
     switch (gearType) {
       case "오토":
-      return CarUploader.gearboxAutoSelector
+      return CarUploaderSelector.gearboxAutoSelector
       case "수동":
-      return CarUploader.gearboxManualSelector
+      return CarUploaderSelector.gearboxManualSelector
       case "CVT":
-      return CarUploader.gearboxCvtSelector
+      return CarUploaderSelector.gearboxCvtSelector
       case "오토":
-      return CarUploader.gearboxSemiAutoSelector
+      return CarUploaderSelector.gearboxSemiAutoSelector
       default:
-        return CarUploader.gearboxAutoSelector
+        return CarUploaderSelector.gearboxAutoSelector
         // throw new Error("No proper gear type")
     }
   }
@@ -200,9 +184,9 @@ export class CarUploader {
     switch (hasAccident) {
       case "무사고":
       case "-":
-      return CarUploader.hasAccidentFalseSelector
+      return CarUploaderSelector.hasAccidentFalseSelector
       case "유사고":
-      return CarUploader.hasAccidentTrueSelector
+      return CarUploaderSelector.hasAccidentTrueSelector
       default:
         throw new Error("No proper accident type")
     }
@@ -213,76 +197,99 @@ export class CarUploader {
       case "검정색":
       case "검정":
       case "검정투톤":
-        return CarUploader.colorBlackSelector
+        return CarUploaderSelector.colorBlackSelector
       case "흰색":
       case "흰색투톤":
-        return CarUploader.colorWhiteSelector
+        return CarUploaderSelector.colorWhiteSelector
       case "진주색":
       case "진주투톤":
       case "베이지":
-        return CarUploader.colorPearlSelector
+        return CarUploaderSelector.colorPearlSelector
       case "쥐색":
-        return CarUploader.colorRatSelector
+        return CarUploaderSelector.colorRatSelector
       case "은하색":
-        return CarUploader.colorGalaxySelector
+        return CarUploaderSelector.colorGalaxySelector
       case "은색":
       case "은색투톤":
       case "은회색":
-        return CarUploader.colorSilverSelector
+        return CarUploaderSelector.colorSilverSelector
       case "회색":
       case "회색투톤":
       case "진회색":
       case "검정쥐색":
-        return CarUploader.colorSilverGreySelector
+        return CarUploaderSelector.colorSilverGreySelector
       case "파랑(남색,곤색)":
       case "청색":
       case "남색":
       case "군청색":
       case "청색투톤":
       case "진청색":
-        return CarUploader.colorBlueSelector
+        return CarUploaderSelector.colorBlueSelector
       case "하늘색":
-        return CarUploader.colorSkySelector
+        return CarUploaderSelector.colorSkySelector
       case "녹색":
       case "녹색투톤":
       case "담녹색":
       case "초록(연두)":
-        return CarUploader.colorGreenSelector
+        return CarUploaderSelector.colorGreenSelector
       case "연두색":
-        return CarUploader.colorPeaGreenSelector
+        return CarUploaderSelector.colorPeaGreenSelector
       case "청옥색":
-        return CarUploader.colorEmeraldSelector
+        return CarUploaderSelector.colorEmeraldSelector
       case "빨강색":
       case "빨강(주홍)":
       case "빨강투톤":
       case "흑장미색":
-        return CarUploader.colorRedSelector
+        return CarUploaderSelector.colorRedSelector
       case "분홍색":
-        return CarUploader.colorPinkSelector
+        return CarUploaderSelector.colorPinkSelector
       case "주황색":
-        return CarUploader.colorOrangeSelector
+        return CarUploaderSelector.colorOrangeSelector
       case "노랑":
       case "노란색":
       case "겨자색":
-        return CarUploader.colorYellowSelector
+        return CarUploaderSelector.colorYellowSelector
       case "금색":
-        return CarUploader.colorGoldSelector
+        return CarUploaderSelector.colorGoldSelector
       case "밤색":
       case "갈색":
       case "갈대색":
       case "갈색(밤색)":
-        return CarUploader.colorBrownSelector
+        return CarUploaderSelector.colorBrownSelector
       case "자주색":
       case "자주(보라)":
-        return CarUploader.colorVioletSelector
+        return CarUploaderSelector.colorVioletSelector
       case "":
-        return CarUploader.colorEtcSelector
+        return CarUploaderSelector.colorEtcSelector
       default:
-        return CarUploader.colorEtcSelector
+        return CarUploaderSelector.colorEtcSelector
     }
   }
+}
 
-  static async saveImage(imageDir: string, url: string) {
+
+export class CarUploader {
+
+  constructor(
+    private page: Page,
+    private id: string,
+    private registerUrl: string,
+    private sources: UploadSource[]
+    ) {}
+
+  static getImageRootDir(id: string) {
+    return `./images/${id}`
+  }
+
+  static getImageDir(id: string, carNumber: string) {
+    return CarUploader.getImageRootDir(id) +`/${carNumber}`
+  }
+
+  static getImagePath(id: string, carNumber: string, imageName: string) {
+    return CarUploader.getImageDir(id, carNumber) + imageName
+  }
+
+  static async saveImage(imageDir: string, url: string): Promise<Base64Image> {
     const response = await fetch(url)
     if (response.status !== 200) {
       console.error(response);
@@ -293,156 +300,122 @@ export class CarUploader {
     const buffer = Buffer.from(arrayBuffer)
     const fileNameList = url.split("_")
     const actualFileName = fileNameList[fileNameList.length-1]
+    const ext = actualFileName.split(".").pop()
     const fileDir = `${imageDir}/${actualFileName}`
     await writeFile(fileDir, buffer)
-    return fileDir
+    const base64 = await readFile(fileDir, {encoding: "base64"})
+    return {
+      base64,
+      ext: ext!,
+    }
   }
 
-  static async saveImages(imageDir: string, carImgList: string[]) {
-    if (!carImgList.length) {
-      return []
-    }
-    return Promise.all(carImgList.map(carImg=>CarUploader.saveImage(imageDir, carImg)))
+  async saveImages(imageDir: string, carImgList: string[]) {
+    return carImgList.length ? Promise.all(carImgList.map(url=>CarUploader.saveImage(imageDir, url))) : []
   }
 
-  static async getFileChooser(page: Page, retry: number = 1): Promise<FileChooser> {
-    console.log(`try: ${retry}`);
-    try {
-      const [fileChooser] = await Promise.all([
-        page.waitForFileChooser({ timeout: 5000 }),
-        page.click(CarUploader.fileChooserSelector)
-      ])
-      return fileChooser
-    } catch(e) {
-      if (!(e instanceof TimeoutError) || retry >= 5) {
-        throw e
-      }
-    }
-    console.log(`retry: ${retry}`);
-    return await CarUploader.getFileChooser(page, retry + 1)
+  async uploadImages(base64ImgList: Base64Image[]) {
+    await this.page.evaluate(async (base64ImgList)=>{
+      const dataTranster = base64ImgList.reduce(
+        (dataTranster, {base64, ext}, index)=>{
+        const bstr = atob(base64)
+        const u8arr = new Uint8Array(bstr.length).map((_, i)=>bstr.charCodeAt(i))
+        dataTranster.items.add(new File([u8arr], `${index}.${ext}`, {type:`image/${ext}`}))
+        return dataTranster
+        },
+        new DataTransfer()
+      )
+      const fileInput = document.getElementById("file_image") as HTMLInputElement | null
+      fileInput!.files = dataTranster.files;
+      fileInput!.dispatchEvent(new Event('change', { bubbles: true })); // 유사하게 input 이벤트도 있음
+    }, base64ImgList)
+
+    await this.page.waitForSelector(CarUploaderSelector.fileUploadedPreviewSelector)
   }
 
-  static async waitImageUpload(page: Page, retry: number = 1): Promise<ElementHandle<Element> | null> {
-    try {
-      const result = await page.waitForSelector(CarUploader.fileUploadedPreviewSelector, { timeout: 10000 * retry })
-      return result
-    } catch (e) {
-      if (!(e instanceof TimeoutError) || retry >= 5) {
-        throw e
-      }
-    }
-    console.log(`retry: ${retry}`);
-    return await CarUploader.waitImageUpload(page, retry + 1)
-  }
-
-  static async uploadImages(page: Page, dirList: string[]) {
-    if (!dirList.length) {
-      return null
-    }
-    console.log("fileChooser start");
-    const fileChooser = await CarUploader.getFileChooser(page)
-    console.log("fileChooser end");
-    await fileChooser.accept(dirList);
-    console.log("fileChooser.accept end");
-    // 여기가 제대로 동작을 안함. 원인을 파악해야함
-    return CarUploader.waitImageUpload(page)
-  }
-
-  static async inputCarInformation(page: Page, car: CarDataObject) {
-    // console.log(car);
-    // carNumber: 차량번호
-    // mileage: 주행거리
-    // displacement: 배기량
-    // price: 가격
-    const additionalPrice = 40
-    const evaluateInput = {
-      carNumberSelector: CarUploader.carNumberInputSelector,
-      carNumberValue: car.carNumber,
-      mileageSelector: CarUploader.mileageInputSelector,
-      mileageValue: car.mileage.replace("Km", "").replace(",", ""),
-      displacementSelector: CarUploader.displacementInputSelector,
-      displacementValue: car.displacement.replace("cc", "").replace(",", "").replace("-", "0"),
-      priceSelector: CarUploader.priceInputSelector,
-      priceValue: (car.price + additionalPrice).toString(),
-    }
-
-    await page.evaluate(input=>{
-      const {
-        carNumberSelector,
-        carNumberValue,
-        mileageSelector,
-        mileageValue,
-        displacementSelector,
-        displacementValue,
-        priceSelector,
-        priceValue
-      } = input
-      const carNumberInput = document.querySelector(carNumberSelector)
-      const mileageInput = document.querySelector(mileageSelector)
-      const displacementInput = document.querySelector(displacementSelector)
-      const priceInput = document.querySelector(priceSelector)
-      if (!carNumberInput || !mileageInput || !displacementInput || !priceInput) {
-        console.table(input);
-        throw new Error("No proper selector")
-      }
-      carNumberInput.setAttribute('value', carNumberValue)
-      mileageInput.setAttribute('value', mileageValue)
-      displacementInput.setAttribute('value', displacementValue)
-      priceInput.setAttribute('value', priceValue)
-    }, evaluateInput)
-
+  async inputCarInformation(car: CarDataObject) {
     // modelYear: 연식
-    const { year, month } = CarUploader.getYearMonthFromString(car.modelYear)
-    await page.select(CarUploader.modelYearSelector, year)
-    await page.select(CarUploader.modelMonthSelector, month)
+    const { year, month } = CarUploaderSelector.getYearMonthFromString(car.modelYear)
+    await this.page.select(CarUploaderSelector.modelYearSelector, year)
+    await this.page.select(CarUploaderSelector.modelMonthSelector, month)
     // fuelType: 연료종류
-    const fuelOption = CarUploader.getFuelType(car.fuelType)
-    await page.select(CarUploader.fuelTypeSelector, fuelOption)
+    const fuelOption = CarUploaderSelector.getFuelType(car.fuelType)
+    await this.page.select(CarUploaderSelector.fuelTypeSelector, fuelOption)
     // gearType: 변속기
-    const gearRadioInput = CarUploader.getGearType(car.gearBox)
-    await page.click(gearRadioInput)
-    // hasAccident: 사고여부
-    const hasAccicentInput = CarUploader.getHasAccident(car.hasAccident)
-    await page.click(hasAccicentInput)
-    if (hasAccicentInput === CarUploader.hasAccidentTrueSelector) {
-      const accidentTextArea = await page.waitForSelector(CarUploader.hasAccidentTextareaSelector)
-      if (accidentTextArea) {
-        accidentTextArea?.type("-")
-      }
-    }
+    const gearRadioInput = CarUploaderSelector.getGearType(car.gearBox)
+    await this.page.click(gearRadioInput)
+
     // 압류: hasSeizure, 저당: hasMortgage
-    const hasSeizureSelector = car.hasSeizure ? CarUploader.hasSeizureTrueSelector : CarUploader.hasSeizureFalseSelector
-    const hasMortgageSelector = car.hasMortgage ? CarUploader.hasMortgageTrueSelector : CarUploader.hasMortgageFalseSelector
-    await page.click(hasSeizureSelector)
-    await page.click(hasMortgageSelector)
-    // 색상: color
-    const color = CarUploader.getColor(car.color)
-    await page.click(CarUploader.colorSelectSelector)
-    await page.waitForSelector(CarUploader.colorItemSelectSelector)
-    await page.click(color)
-    if (color === CarUploader.colorEtcSelector) {
-      const carColorInput = await page.waitForSelector(CarUploader.colorEtcInputSelector)
-      if (carColorInput) {
-        await carColorInput.type("-")
-      }
+    const hasSeizureSelector = car.hasSeizure ? CarUploaderSelector.hasSeizureTrueSelector : CarUploaderSelector.hasSeizureFalseSelector
+    const hasMortgageSelector = car.hasMortgage ? CarUploaderSelector.hasMortgageTrueSelector : CarUploaderSelector.hasMortgageFalseSelector
+    await this.page.click(hasSeizureSelector)
+    await this.page.click(hasMortgageSelector)
+
+    // hasAccident: 사고여부
+    const hasAccicentInput = CarUploaderSelector.getHasAccident(car.hasAccident)
+    await this.page.click(hasAccicentInput)
+    if (hasAccicentInput === CarUploaderSelector.hasAccidentTrueSelector) {
+      const accidentTextArea = await this.page.waitForSelector(CarUploaderSelector.hasAccidentTextareaSelector)
+      await accidentTextArea!.type("-")
     }
+
+    // 색상: color
+    const color = CarUploaderSelector.getColor(car.color)
+    await this.page.click(CarUploaderSelector.colorSelectSelector)
+    await this.page.waitForSelector(CarUploaderSelector.colorItemSelectSelector)
+    await this.page.click(color)
+    if (color === CarUploaderSelector.colorEtcSelector) {
+      const carColorInput = await this.page.waitForSelector(CarUploaderSelector.colorEtcInputSelector)
+      await carColorInput!.type("-")
+    }
+
+    // carNumber: 차량번호 / mileage: 주행거리 / displacement: 배기량 / price: 가격
+    const additionalPrice = 40
+    const evaluateInputList = [
+      {
+        selector: CarUploaderSelector.carNumberInputSelector,
+        value: car.carNumber,
+      },
+      {
+        selector: CarUploaderSelector.mileageInputSelector,
+        value: car.mileage.replace("Km", "").replace(",", ""),
+      },
+      {
+        selector: CarUploaderSelector.displacementInputSelector,
+        value: car.displacement.replace("cc", "").replace(",", "").replace("-", "0"),
+      },
+      {
+        selector: CarUploaderSelector.priceInputSelector,
+        value: (car.price + additionalPrice).toString(),
+      }
+    ]
+
+    await this.page.evaluate(list=>{
+      list.forEach(({ selector, value })=>{
+        const input = document.querySelector(selector)
+        if (!input) {
+          throw new Error("No proper selector")
+        }
+        input.setAttribute('value', value)
+      })
+    }, evaluateInputList)
   }
 
-  static async categorizeCar(page: Page, source: UploadSource) {
+  async categorizeCar(source: UploadSource) {
     const { origin, carSegment, carCompany, carModel, carDetailModel, car } = source
-    const originSelector = CarUploader.getOriginSelector(origin)
-    const segmentSelector = CarUploader.getSegmentSelector(carSegment.name)
+    const originSelector = CarUploaderSelector.getOriginSelector(origin)
+    const segmentSelector = CarUploaderSelector.getSegmentSelector(carSegment.name)
     // const companySelector1 = CarUploader.companyBase + `:nth-child(${carCompany.index})`
-    const companySelector2 = CarUploader.companyDataValueBase + carCompany.dataValue
+    const companySelector2 = CarUploaderSelector.companyDataValueBase + carCompany.dataValue
 
-    await page.click(originSelector)
-    await page.click(segmentSelector)
+    await this.page.click(originSelector)
+    await this.page.click(segmentSelector)
     await delay(100)
-    // await page.click(companySelector1)
-    await page.click(companySelector2)
+    // await this.page.click(companySelector1)
+    await this.page.click(companySelector2)
 
     if (origin === ManufacturerOrigin.Imported || !carModel) {
-      const carTitleInput = await page.waitForSelector(CarUploader.modelNameInputSelector)
+      const carTitleInput = await this.page.waitForSelector(CarUploaderSelector.modelNameInputSelector)
       if (carTitleInput) {
         await carTitleInput.type(car.title)
       }
@@ -451,63 +424,61 @@ export class CarUploader {
     // model은 있지만 detailModel이 없는 경우도 있을 수 있다.
     // 추후 문제가 생기는 경우 기타로 지정해서 carTitle을 적어주는 것을 고려해볼 것
     await delay(100)
-    const modelSelector = CarUploader.modelDataValueBase + carModel?.dataValue
-    await page.click(modelSelector)
+    const modelSelector = CarUploaderSelector.modelDataValueBase + carModel?.dataValue
+    await this.page.click(modelSelector)
 
     if (!carDetailModel) {
       return
     }
 
     await delay(100)
-    const detailModelSelector = CarUploader.detailModelDataValueBase + carDetailModel.dataValue
-    await page.click(detailModelSelector)
+    const detailModelSelector = CarUploaderSelector.detailModelDataValueBase + carDetailModel.dataValue
+    await this.page.click(detailModelSelector)
   }
 
-  static async uploadCar(page: Page, id: string, source: UploadSource) {
-    const imageDir = CarUploader.getImageDir(id, source.car.carNumber)
-    try {
-      // 사진
-      await mkdir(imageDir)
-      const dirList = await CarUploader.saveImages(imageDir, source.car.carImgList)
-      // form 채우기
-      await CarUploader.inputCarInformation(page, source.car)
-      // 차량 카테고리 설정
-      await CarUploader.categorizeCar(page, source)
-      await page.focus(CarUploader.imageRegisterButtonSelector)
-      // 이미지 업로드. 순서상 여기에 안넣으면 따로 delay를 넣어주어야 한다.
-      // 업로드가 씹히기 때문.
-      // 실제 fileChooser까지는 제대로 동작하지만, 실제 업로드 후 waitSelector가 제대로 동작하지 않는다.
-      // 수정이 필요함. (로컬에서는 정상 동작하지만, 실제로는 동작하지 않음)
-      await CarUploader.uploadImages(page, dirList)
-      await page.click(CarUploader.submitInputSelector)
-      await page.waitForNavigation({waitUntil: "load"})
-    } catch (error) {
-      console.error("차량 등록에 실패했습니다.");
-      console.error(error);
-      console.error(source);
-    } finally {
-      await rm(imageDir, { recursive: true, force: true })
-    }
+  async uploadCar(source: UploadSource) {
+    const imageDir = CarUploader.getImageDir(this.id, source.car.carNumber)
+
+    await this.page.goto(this.registerUrl, { waitUntil: "networkidle2"})
+    await this.page.waitForSelector(CarUploaderSelector.formBase)
+    const base64ImageList = await this.saveImages(imageDir, source.car.carImgList)
+    // form 채우기
+    await this.inputCarInformation(source.car)
+    // 차량 카테고리 설정
+    await this.categorizeCar(source)
+    await this.page.focus(CarUploaderSelector.imageRegisterButtonSelector)
+    await this.uploadImages(base64ImageList)
+    await this.page.click(CarUploaderSelector.submitInputSelector)
+    await this.page.waitForNavigation() // {waitUntil: "load"}
   }
 
-  async uploadCars(page: Page) {
-    try {
-      for (const source of this.sources) {
-        console.log(source.car.carNumber);
-
-        await page.goto(this.registerUrl, { waitUntil: "networkidle2"})
-        await page.waitForSelector(CarUploader.formBase)
-        await CarUploader.uploadCar(page, this.id, source)
+  async uploadCars() {
+    for (const source of this.sources) {
+      console.log(source.car.carNumber);
+      const imageDir = CarUploader.getImageDir(this.id, source.car.carNumber)
+      try {
+        await mkdir(imageDir)
+      } catch {
+        console.log("account directory already exist. skip mkdir");
       }
-    } catch (error) {
-      console.error(error);
-      console.log("실행 완료");
-      // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
-      // 이후 타임아웃 에러가 발생하게 된다.
-      // 모두 완료가 되었으면 차량 정보에 대한 DB 갱신이 있어야 한다.
-      // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
-      // dialog에서도 이를 처리해 줄 수 있도록 하자.
-      // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.
+      try {
+        await this.uploadCar(source)
+      } catch (error) {
+        console.error(
+          "차량 등록에 실패했습니다."
+          + `\n차량 번호 : ${source.car.carNumber}`
+          + `\n차량 제목 ${source.car.title}}`
+          + `\n${error}`
+        );
+      } finally {
+        await rm(imageDir, { recursive: true, force: true })
+      }
     }
+    // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
+    // 이후 타임아웃 에러가 발생하게 된다.
+    // 모두 완료가 되었으면 차량 정보에 대한 DB 갱신이 있어야 한다.
+    // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
+    // dialog에서도 이를 처리해 줄 수 있도록 하자.
+    // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.
   }
 }

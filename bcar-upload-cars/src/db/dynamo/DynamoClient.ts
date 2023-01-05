@@ -23,7 +23,7 @@ class DynamoBaseClient {
   client: DynamoDBClient;
 
   constructor(region: string) {
-    this.client = new DynamoDBClient({ region }); // 'ap-northeast-1'
+    this.client = new DynamoDBClient({ region }); // 'ap-northeast-2'
   }
 
   async describeTable(tableName: string) {

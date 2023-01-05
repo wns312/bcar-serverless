@@ -44,7 +44,7 @@ const deployEnvs = {
 }
 
 if (envs.NODE_ENV === 'prod') {
-  console.table(process.env);
+  console.info(process.env);
 }
 
 // 여기서 false
