@@ -4,7 +4,6 @@ import { BrowserInitializer } from "."
 import { DynamoUploadedCarClient } from "../db/dynamo"
 // import { AccountSheetClient } from "../sheet"
 // import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin } from "../types"
-// import { CarObjectFormatter } from "../utils"
 
 export class UploadedCarSyncService {
 
@@ -14,7 +13,7 @@ export class UploadedCarSyncService {
   ) {}
 
   async execute() {
-    const result = await this.dynamoUploadedCarClient.scanUpdatedCars()
-    console.log(result.items);
+    const result = await this.dynamoUploadedCarClient.scanUpdatedCars(10)
+    console.log(result);
   }
 }

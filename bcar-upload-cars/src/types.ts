@@ -85,3 +85,9 @@ export interface Base64Image {
   base64: string
   ext: string
 }
+
+export interface UploadResult {
+  id: string;
+  succeededSources: UploadSource[];
+  failedSources: UploadSource[];
+}

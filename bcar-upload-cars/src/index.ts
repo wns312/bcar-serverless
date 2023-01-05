@@ -1,8 +1,9 @@
-import { rm } from "fs/promises"
+import { existsSync } from "node:fs"
+import { mkdir, rm } from "fs/promises"
 import { envs } from "./configs"
 import { BrowserInitializer, CategoryCrawler, CategoryService, UploadedCarSyncService } from "./puppeteer"
 import { CarUploadService } from "./puppeteer"
-import { CategoryFormatter, CarObjectFormatter } from "./utils"
+import { CategoryFormatter, CarObjectFormatter, UploadedCarFormatter } from "./utils"
 import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db/dynamo"
 import { AccountSheetClient } from "./sheet/index"
 
@@ -17,6 +18,7 @@ async function syncUpdatedCars() {
     GOOGLE_PRIVATE_KEY,
     NODE_ENV,
   } = envs
+
   const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const initializer = new BrowserInitializer(NODE_ENV)
   const syncService = new UploadedCarSyncService(dynamoUploadedCarClient, initializer)
@@ -24,7 +26,6 @@ async function syncUpdatedCars() {
 }
 
 async function testUpdateCars() {
-  await rm('./images/*', { recursive: true, force: true })
   const {
     BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
     BCAR_ANSAN_CROSS_LOGIN_URL,
@@ -41,14 +42,19 @@ async function testUpdateCars() {
   const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
   const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const formatter = new CarObjectFormatter()
+  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const carObjectFormatter = new CarObjectFormatter()
+  const uploadedCarFormatter = new UploadedCarFormatter()
+
   const initializer = new BrowserInitializer(NODE_ENV)
 
   const carUploadService = new CarUploadService(
     sheetClient,
     dynamoCarClient,
     dynamoCategoryClient,
-    formatter,
+    dynamoUploadedCarClient,
+    carObjectFormatter,
+    uploadedCarFormatter,
     initializer
   )
 
@@ -89,14 +95,17 @@ async function updateCars() {
   const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
   const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const formatter = new CarObjectFormatter()
+  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const initializer = new BrowserInitializer(NODE_ENV)
-
+  const carObjectFormatter = new CarObjectFormatter()
+  const uploadedCarFormatter = new UploadedCarFormatter()
   const carUploadService = new CarUploadService(
     sheetClient,
     dynamoCarClient,
     dynamoCategoryClient,
-    formatter,
+    dynamoUploadedCarClient,
+    carObjectFormatter,
+    uploadedCarFormatter,
     initializer
   )
 
@@ -176,4 +185,11 @@ if (!fc) {
   throw new Error("There is not matched function");
 }
 
-fc()
+(async ()=>{
+  await rm('./images/*', { recursive: true, force: true })
+  if(!existsSync("./images")) {
+    await mkdir("./images")
+  }
+  await fc()
+})()
+

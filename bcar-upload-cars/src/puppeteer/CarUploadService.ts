@@ -1,17 +1,20 @@
+import { existsSync } from 'node:fs';
 import { mkdir, rm } from "fs/promises"
 import { AttributeValue } from "@aws-sdk/client-dynamodb"
 import { BrowserInitializer, CarClassifier, CarUploader } from "."
-import { DynamoClient, DynamoCategoryClient } from "../db/dynamo"
+import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "../db/dynamo"
 import { AccountSheetClient } from "../sheet"
-import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin } from "../types"
-import { CarObjectFormatter } from "../utils"
+import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin, UploadSource } from "../types"
+import { CarObjectFormatter, UploadedCarFormatter } from "../utils"
 
 export class CarUploadService {
   constructor(
     private sheetClient: AccountSheetClient,
     private dynamoCarClient: DynamoClient,
     private dynamoCategoryClient: DynamoCategoryClient,
-    private formatter: CarObjectFormatter,
+    private dynamoUploadedCarClient: DynamoUploadedCarClient,
+    private carObjectFormatter: CarObjectFormatter,
+    private uploadedCarFormatter: UploadedCarFormatter,
     private initializer: BrowserInitializer,
   ) {}
 
@@ -129,24 +132,35 @@ export class CarUploadService {
   // 10개까지 사용한 경우에 ip가 차단되었음. (하나의 ip에서의 과도한 트래픽 발생이 가장 중요한 원인. max browser 3~5개)
   // 차량을 더이상 등록할 수 없는 경우 위의 이벤트 리스너를 통해서 실행을 종료한다.
   // 이 경우에도 차량 등록 내용을 갱신해주어야 한다.
-  async uploadCars(loginUrl: string,registerUrl: string,workerAmount: number,carAmount: number) {
+  async uploadCars(loginUrl: string, registerUrl: string, workerAmount: number, carAmount: number) {
     console.log("데이터 조회 시작");
     const result = await this.dynamoCarClient.getSomeCars()  // 여기가 되게 오래 걸림
     // let result = await this.dynamoCarClient.getAllCars(10)
+
     const { id: testId, pw: testPw } = await this.sheetClient.getTestAccount()
     const { segmentMap, companyMap } = await this.initializeMaps()  // 여기도 약간 오래걸림
 
     console.log("차량 객체 생성 및 분류 시작");
-    const cars = this.formatter.createCarObject(result.items.slice(0, carAmount))
+    const cars = this.carObjectFormatter.createCarObject(result.items.slice(0, carAmount))
     const carClassifier = new CarClassifier(cars, segmentMap, companyMap)
     const classifiedCars = carClassifier.classifyAll()
 
-    console.log("id 디렉토리 생성");
+    // 작업 순서
+    // 0. 모든 아이디에 대해 다음 동작을 수행한다.
+    // 1. 모든 업로드 된 차량을 검사해서 마감된 차량을 뺀다.
+    // 2. DB의 업로드 데이터에서 마감 된 차량을 모두 제거한다.
+    // 3. 모든 차량 중에서 마감된 차량을 제거했으므로, 새로 모든 업로드된 차량을 조회한다.
+    // 4. 업로드가 되지 않은 차량을 걸러낸다
+    // 5. 업로드가 되지 않은 차량들을 업로드한다.
+
     const rootDir = CarUploader.getImageRootDir(testId)
-    try {
+    if(!existsSync(rootDir)) {
       await mkdir(rootDir)
-    } catch {
-      console.log("account directory already exist. skip mkdir");
+    }
+
+    const sourceMapObj = {
+      succeededSourceMap: new Map<string, UploadSource[]>(),
+      failedSourceMap: new Map<string, UploadSource[]>()
     }
 
     console.log(`브라우저 페이지 초기화 : ${workerAmount}`);
@@ -166,11 +180,47 @@ export class CarUploadService {
           classifiedCars.slice(index*200, index*200 + 200),
         ).uploadCars()
       })
-      await Promise.all(carUploderResult)
+      // 이렇게 처리되면 중간에 아예 에러나는 경우에 업데이트를 못하게 될 수도 있음.
+      // 예를 들어 page에러가 발생해서 브라우저가 아예 꺼져버리는 경우
+      // 천천히 생각해보자 우선 업로드 로직부터 짜자
+      const uploadResults = await Promise.all(carUploderResult)
+      // id별 분류가 이루어지는 것이 맞다
+
+      uploadResults.reduce(({ succeededSourceMap, failedSourceMap }, {id, succeededSources, failedSources})=>{
+        let existingSucceededSources = succeededSourceMap.get(id)
+        let existingFailedSources = failedSourceMap.get(id)
+        existingSucceededSources = existingSucceededSources ? existingSucceededSources : []
+        existingFailedSources = existingFailedSources ? existingFailedSources : []
+        if (succeededSources.length) {
+          succeededSourceMap.set(id, [ ...existingSucceededSources , ...succeededSources])
+        }
+        if (failedSources.length) {
+          failedSourceMap.set(id, [ ...existingFailedSources , ...failedSources])
+        }
+        return {
+          succeededSourceMap,
+          failedSourceMap
+        }
+      }, sourceMapObj)
+
+      const succeededSourceIds = Array.from(sourceMapObj.succeededSourceMap.keys())
+      for (const id of succeededSourceIds) {
+        const sources = sourceMapObj.succeededSourceMap.get(id)
+        const inputItems = this.uploadedCarFormatter.createupdateSourceForm(id, sources!)
+        console.log(inputItems);
+        const responses = await this.dynamoUploadedCarClient.batchPutItems(...inputItems)
+        responses.forEach(r=>{
+          console.log(r);
+        })
+      }
+
+      // 실패 차량에 대한 분석 및 추후 처리가 필요하기 때문
+      // const failedSourceIds = Array.from(sourceMapObj.failedSourceMap.keys())
+
     } catch(e) {
-      console.error(e);
+      throw e
     } finally {
-      console.log("id 디렉토리 삭제");
+      console.log(sourceMapObj);
       await rm(rootDir, { recursive: true, force: true })
     }
   }

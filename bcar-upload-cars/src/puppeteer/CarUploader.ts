@@ -1,6 +1,7 @@
+import { existsSync } from 'node:fs';
 import { writeFile, mkdir, rm, readFile } from "fs/promises"
-import { ElementHandle, Page, TimeoutError } from "puppeteer"
-import { CarDataObject, ManufacturerOrigin, UploadSource, Base64Image } from "../types"
+import { Page, ProtocolError, TimeoutError } from "puppeteer"
+import { Base64Image, CarDataObject, ManufacturerOrigin, UploadSource, UploadResult } from "../types"
 import { delay } from "../utils"
 
 // 이 클래스의 인스턴스가 할 일은
@@ -452,26 +453,40 @@ export class CarUploader {
     await this.page.waitForNavigation() // {waitUntil: "load"}
   }
 
-  async uploadCars() {
+  async uploadCars(): Promise<UploadResult> {
+    const succeededSources: UploadSource[] = []
+    const failedSources: UploadSource[] = []
     for (const source of this.sources) {
       console.log(source.car.carNumber);
       const imageDir = CarUploader.getImageDir(this.id, source.car.carNumber)
-      try {
+      if(!existsSync(imageDir)) {
         await mkdir(imageDir)
-      } catch {
-        console.log("account directory already exist. skip mkdir");
       }
       try {
         await this.uploadCar(source)
+        succeededSources.push(source)
       } catch (error) {
+        failedSources.push(source)
+
+        if (
+          error instanceof ProtocolError
+          || !(error instanceof Error)
+          ) {
+          console.log("Unexpected error: stop execution");
+          return { id: this.id, succeededSources, failedSources }
+        }
         console.error(
           "차량 등록에 실패했습니다."
-          + `\n차량 번호 : ${source.car.carNumber}`
-          + `\n차량 제목 ${source.car.title}}`
-          + `\n${error}`
-        );
+          + `\n차량 번호: ${source.car.carNumber}`
+          + `\n차량 제목: ${source.car.title}`
+          + `\n에러 이름: ${error.name}`
+          + `\n에러 메시지: ${error.message}`
+          + `\n에러: ${error}`
+        )
       } finally {
-        await rm(imageDir, { recursive: true, force: true })
+        if(existsSync(imageDir)) {
+          await rm(imageDir, { recursive: true, force: true })
+        }
       }
     }
     // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
@@ -480,5 +495,6 @@ export class CarUploader {
     // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
     // dialog에서도 이를 처리해 줄 수 있도록 하자.
     // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.
+    return { id: this.id, succeededSources, failedSources }
   }
 }

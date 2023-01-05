@@ -1,6 +1,7 @@
 import { PutRequest } from "@aws-sdk/client-dynamodb";
-import { CarManufacturer, CarDataObject, CarSegment, RangeChunk, ManufacturerOrigin } from "../types"
+import { CarManufacturer, CarDataObject, CarSegment, RangeChunk, ManufacturerOrigin, UploadSource } from "../types"
 import { AttributeValue } from "@aws-sdk/client-dynamodb"
+
 export function chunk<T>(arr: T[], size: number): T[][] {
   return arr.reduce<T[][]>(
     (a, item) => {
@@ -185,6 +186,23 @@ export class CarObjectFormatter {
   }
 }
 
+export class UploadedCarFormatter {
+  constructor(){}
+
+  createupdateSourceForm(id: string, updatedSources: UploadSource[]): PutRequest[] {
+    const now = Date.now()
+    return updatedSources.map(s=>({
+      Item: {
+        PK: { S: `#USER-${id}` },
+        SK: { S: `#CAR-${s.car.carNumber}` },
+        registeredAt: { N: now.toString() },
+      }
+    }))
+  }
+}
+
+
+
 export const categoryConvertor = new Map<string, string>([
   ["", "중대형"], // 카테고리가 없는 차량은 중대형으로 그냥 넣어버린다.
   ["대형차", "중대형"],
@@ -265,3 +283,4 @@ export const modelDetailConverter = new Map<string, string>([
   ["올뉴모닝JA", "올뉴모닝(JA)"],
   ["캡처", "캡쳐"],
 ])
+
