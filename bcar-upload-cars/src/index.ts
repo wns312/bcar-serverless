@@ -1,11 +1,27 @@
-import { mkdir, rm } from "fs/promises"
+import { rm } from "fs/promises"
 import { envs } from "./configs"
-import { BrowserInitializer, CategoryCrawler, CategoryService } from "./puppeteer"
+import { BrowserInitializer, CategoryCrawler, CategoryService, UploadedCarSyncService } from "./puppeteer"
 import { CarUploadService } from "./puppeteer"
 import { CategoryFormatter, CarObjectFormatter } from "./utils"
-import { DynamoClient, DynamoCategoryClient } from "./db/dynamo"
+import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db/dynamo"
 import { AccountSheetClient } from "./sheet/index"
-import { request } from "http"
+
+async function syncUpdatedCars() {
+  const {
+    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+    BCAR_ANSAN_CROSS_LOGIN_URL,
+    BCAR_INDEX,
+    BCAR_TABLE,
+    DYNAMO_DB_REGION,
+    GOOGLE_CLIENT_EMAIL,
+    GOOGLE_PRIVATE_KEY,
+    NODE_ENV,
+  } = envs
+  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+  const initializer = new BrowserInitializer(NODE_ENV)
+  const syncService = new UploadedCarSyncService(dynamoUploadedCarClient, initializer)
+  await syncService.execute()
+}
 
 async function testUpdateCars() {
   await rm('./images/*', { recursive: true, force: true })
@@ -50,7 +66,7 @@ async function testUpdateCars() {
       console.error(error.stack);
     }
   } finally {
-    await initializer.closeBrowsers()
+    await initializer.closePages()
   }
   console.log("End execution");
 
@@ -98,7 +114,7 @@ async function updateCars() {
       console.error(error.stack);
     }
   } finally {
-    await initializer.closeBrowsers()
+    await initializer.closePages()
   }
 }
 
@@ -131,35 +147,18 @@ async function crawlCategories() {
       console.error(error.stack);
     }
   } finally {
-    await initializer.closeBrowsers()
+    await initializer.closePages()
   }
 }
 
-function checkIPAddress() {
-  const options = {
-    host: 'api.ipify.org',
-    port: 80,
-    path: '/?format=json'
-  };
-
-  const req = request(options, (res) => {
-    res.setEncoding('utf8');
-
-    let body = '';
-    res.on('data', (chunk) => {
-      body += chunk;
-    });
-
-    res.on('end', () => {
-      const data = JSON.parse(body);
-      console.log(data.ip);
-    });
-  });
-
-  req.end();
+async function checkIPAddress() {
+  const response = await fetch('http://api.ipify.org/?format=json')
+  const body = await response.json()
+  console.log(body.ip);
 }
 
 const functionMap = new Map<string, Function>([
+  [syncUpdatedCars.name, syncUpdatedCars],
   [testUpdateCars.name, testUpdateCars],
   [updateCars.name, updateCars],
   [crawlCategories.name, crawlCategories],

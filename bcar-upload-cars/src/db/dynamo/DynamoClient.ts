@@ -361,16 +361,14 @@ export class DynamoCategoryClient {
   }
 
   private async scanWithStartString(PK: string, SK?: string) {
-    const FilterExpression = "begins_with(SK, :s) and begins_with(PK, :p)"
-    const scanCommandInput = {
+    const result = await this.baseClient.scanItems({
       TableName: this.tableName,
-      FilterExpression,
+      FilterExpression: `begins_with(PK, :p) and begins_with(SK, :s)`,
       ExpressionAttributeValues: {
         ":p": { S: PK },
         ":s": { S: SK || PK },
-      },
-    }
-    const result = await this.baseClient.scanItems(scanCommandInput)
+      }
+    })
 
     if (result.$metadata.httpStatusCode !== 200) {
       throw new ResponseError(`${result.$metadata}`)
@@ -507,5 +505,41 @@ export class DynamoCategoryClient {
       },
       '#MODEL',
     )
+  }
+}
+
+export class DynamoUploadedCarClient {
+  baseClient: DynamoBaseClient;
+  tableName: string;
+  indexName: string;
+
+  constructor(region: string, tableName: string, indexName: string) {
+    this.baseClient = new DynamoBaseClient(region);
+    this.tableName = tableName;
+    this.indexName = indexName;
+  }
+
+  private async scanWithStartString(PK: string, SK?: string) {
+    const result = await this.baseClient.scanItems({
+      TableName: this.tableName,
+      FilterExpression: `begins_with(PK, :p) and begins_with(SK, :s)`,
+      ExpressionAttributeValues: {
+        ":p": { S: PK },
+        ":s": { S: SK || PK },
+      }
+    })
+
+    if (result.$metadata.httpStatusCode !== 200) {
+      throw new ResponseError(`${result.$metadata}`)
+    }
+
+    return {
+      items: result.Items ? result.Items : [],
+      count: result.Count!
+    }
+  }
+
+  scanUpdatedCars() {
+    return this.scanWithStartString('#USER', '#CAR')
   }
 }
