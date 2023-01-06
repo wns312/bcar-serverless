@@ -3,7 +3,6 @@ import { mkdir, rm } from "fs/promises"
 import { envs } from "./configs"
 import { BrowserInitializer, CategoryCrawler, CategoryService, UploadedCarSyncService } from "./puppeteer"
 import { CarUploadService } from "./puppeteer"
-import { CategoryFormatter, CarObjectFormatter, UploadedCarFormatter } from "./utils"
 import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db/dynamo"
 import { AccountSheetClient } from "./sheet"
 
@@ -45,8 +44,6 @@ async function testUpdateCars() {
   const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
   const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const carObjectFormatter = new CarObjectFormatter()
-  const uploadedCarFormatter = new UploadedCarFormatter()
 
   const initializer = new BrowserInitializer(NODE_ENV)
 
@@ -55,8 +52,6 @@ async function testUpdateCars() {
     dynamoCarClient,
     dynamoCategoryClient,
     dynamoUploadedCarClient,
-    carObjectFormatter,
-    uploadedCarFormatter,
     initializer
   )
 
@@ -99,15 +94,11 @@ async function updateCars() {
   const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
   const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
   const initializer = new BrowserInitializer(NODE_ENV)
-  const carObjectFormatter = new CarObjectFormatter()
-  const uploadedCarFormatter = new UploadedCarFormatter()
   const carUploadService = new CarUploadService(
     sheetClient,
     dynamoCarClient,
     dynamoCategoryClient,
     dynamoUploadedCarClient,
-    carObjectFormatter,
-    uploadedCarFormatter,
     initializer
   )
 
@@ -145,9 +136,8 @@ async function crawlCategories() {
   const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
   const initializer = new BrowserInitializer(NODE_ENV)
   const crawler = new CategoryCrawler(initializer)
-  const formatter = new CategoryFormatter()
   const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const categoryService = new CategoryService(sheetClient, crawler, formatter, dynamoClient)
+  const categoryService = new CategoryService(sheetClient, crawler, dynamoClient)
 
   try {
     await categoryService.collectCategoryInfo(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)

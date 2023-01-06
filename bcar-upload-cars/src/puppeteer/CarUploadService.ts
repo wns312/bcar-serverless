@@ -4,8 +4,7 @@ import { AttributeValue } from "@aws-sdk/client-dynamodb"
 import { BrowserInitializer, CarClassifier, CarUploader } from "."
 import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "../db/dynamo"
 import { AccountSheetClient } from "../sheet"
-import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin, UploadSource } from "../types"
-import { CarObjectFormatter, UploadedCarFormatter } from "../utils"
+import { CarDataObject, CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin, UploadSource } from "../types"
 
 export class CarUploadService {
   constructor(
@@ -13,10 +12,36 @@ export class CarUploadService {
     private dynamoCarClient: DynamoClient,
     private dynamoCategoryClient: DynamoCategoryClient,
     private dynamoUploadedCarClient: DynamoUploadedCarClient,
-    private carObjectFormatter: CarObjectFormatter,
-    private uploadedCarFormatter: UploadedCarFormatter,
     private initializer: BrowserInitializer,
   ) {}
+
+  static createCarObject(items: Record<string, AttributeValue>[]): CarDataObject[] {
+    return items.map(item=>{
+      return {
+        PK: item.PK.S!,
+        SK: item.SK.S!,
+        carCheckSrc: item.CarCheckSrc.S!,
+        modelYear: item.ModelYear.S!,
+        presentationsDate: item.PresentationsDate.S!,
+        displacement: item.Displacement.S!,
+        mileage: item.Mileage.S!,
+        carImgList: item.CarImgList ? item.CarImgList.SS! : [],
+        hasMortgage: item.HasMortgage.BOOL!,
+        hasSeizure: item.HasSeizure.BOOL!,
+        title: item.Title.S!,
+        fuelType: item.FuelType.S!,
+        carNumber: item.CarNumber.S!,
+        registerNumber: item.RegisterNumber.S!,
+        presentationNumber: item.PresentationNumber.S!,
+        price: Number.parseInt(item.Price.N!),
+        hasAccident: item.HasAccident.S!,
+        gearBox: item.GearBox.S!,
+        color: item.Color.S!,
+        company: item.Company.S!,
+        category: item.Category.S!,
+      }
+    })
+  }
 
   private createSegmentMap(items: Record<string, AttributeValue>[]): Map<string, CarSegment> {
     const segmentMap = new Map<string, CarSegment>()
@@ -141,7 +166,7 @@ export class CarUploadService {
     const { segmentMap, companyMap } = await this.initializeMaps()  // 여기도 약간 오래걸림
 
     console.log("차량 객체 생성 및 분류 시작");
-    const cars = this.carObjectFormatter.createCarObject(result.items.slice(0, carAmount))
+    const cars = CarUploadService.createCarObject(result.items.slice(0, carAmount))
     const carClassifier = new CarClassifier(cars, segmentMap, companyMap)
     const classifiedCars = carClassifier.classifyAll()
 
@@ -206,9 +231,7 @@ export class CarUploadService {
       const succeededSourceIds = Array.from(sourceMapObj.succeededSourceMap.keys())
       for (const id of succeededSourceIds) {
         const sources = sourceMapObj.succeededSourceMap.get(id)
-        const inputItems = this.uploadedCarFormatter.createupdateSourceForm(id, sources!)
-        console.log(inputItems);
-        const responses = await this.dynamoUploadedCarClient.batchPutItems(...inputItems)
+        const responses = await this.dynamoUploadedCarClient.saveUpdatedCars(id, sources!)
         responses.forEach(r=>{
           console.log(r);
         })

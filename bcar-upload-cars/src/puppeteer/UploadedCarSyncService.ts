@@ -19,21 +19,20 @@ export class UploadedCarSyncService {
       this.dynamoCarClient.getAllCars(10),
       this.dynamoUploadedCarClient.scanUpdatedCars(10)
     ])
-    // 변환을 먼저 해주어야 한다? 아니야 존재 확인만 하면 됨
+
     const carResultMap = carResults.items.reduce((map, item)=>
       map.set(item.PK.S!, item.Title.S!),
       new Map<string, string>()
     )
-    // 차량이 판매중인 애들만 남긴 것
-    const updatedCarResultMap = updatedCarResults.items.reduce((map, item)=>{
-        return carResultMap.get(item.SK.S!) ? map.set(item.SK.S!, item.PK.S!) : map
-      },
+
+    const updatedCarResultMap = updatedCarResults.items.reduce((map, item)=>
+      carResultMap.get(item.SK.S!) ? map.set(item.SK.S!, item.PK.S!) : map,
       new Map<string, string>()
     )
-    console.log(carResultMap);
-    console.log(updatedCarResultMap);
-    return Array.from(updatedCarResultMap.entries()).reduce((map, [car, user])=>{
-      let carList = map.get(user)
+
+    return Array.from(updatedCarResultMap.entries()).reduce((map, [car, userPk])=>{
+      const user = userPk.replace('#USER-', '')
+      const carList = map.get(user)
       return map.set(user, carList ? [...carList, car]: [car])
     }, new Map<string, string[]>())
   }
@@ -43,7 +42,7 @@ export class UploadedCarSyncService {
       this.getExistingUpdatedCarMap(),
       this.accountSheetClient.getAccounts(),
     ])
-    const userIds = Array.from(userCarMap.keys()).map(userPk=>userPk.replace('#USER-', ''))
+    const userIds = Array.from(userCarMap.keys())
     const filteredUsers = users.filter(user=>userIds.includes(user.id))
     console.log(userIds);
     console.log(filteredUsers);
