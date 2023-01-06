@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { writeFile, mkdir, rm, readFile } from "fs/promises"
-import { Page, ProtocolError, TimeoutError } from "puppeteer"
+import { Page, ProtocolError } from "puppeteer"
 import { Base64Image, CarDataObject, ManufacturerOrigin, UploadSource, UploadResult } from "../types"
 import { delay } from "../utils"
 

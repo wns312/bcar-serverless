@@ -1,14 +1,13 @@
 // import { mkdir, rm } from "fs/promises"
 // import { AttributeValue } from "@aws-sdk/client-dynamodb"
-import { BrowserInitializer } from "."
-import { DynamoClient, DynamoUploadedCarClient } from "../db/dynamo"
-import { AccountSheetClient } from "../sheet"
+import { BrowserInitializer } from "../puppeteer"
+import { AccountSheetClient, DynamoCarClient, DynamoUploadedCarClient } from "../db"
 // import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin } from "../types"
 
 export class UploadedCarSyncService {
 
   constructor(
-    private dynamoCarClient: DynamoClient,
+    private dynamoCarClient: DynamoCarClient,
     private dynamoUploadedCarClient: DynamoUploadedCarClient,
     private accountSheetClient: AccountSheetClient,
     private initializer: BrowserInitializer,

@@ -1,8 +1,8 @@
 // https://github.com/googleapis/google-api-nodejs-client/tree/main/samples/sheets
 import { google, sheets_v4 } from "googleapis"
-import { envs } from "../configs"
-import { ResponseError } from "../errors"
-import { Account } from "../types"
+import { envs } from "../../configs"
+import { ResponseError } from "../../errors"
+import { Account } from "../../types"
 
 export class AccountSheetClient {
   static sheetName = envs.GOOGLE_ACCOUNT_SHEET_NAME

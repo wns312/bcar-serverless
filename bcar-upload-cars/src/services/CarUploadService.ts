@@ -1,20 +1,20 @@
 import { existsSync } from 'node:fs';
 import { mkdir, rm } from "fs/promises"
 import { AttributeValue } from "@aws-sdk/client-dynamodb"
-import { BrowserInitializer, CarClassifier, CarUploader } from "."
-import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "../db/dynamo"
-import { AccountSheetClient } from "../sheet"
+import { BrowserInitializer, CarClassifier, CarUploader } from "../puppeteer"
+import { AccountSheetClient, DynamoCarClient, DynamoCategoryClient, DynamoUploadedCarClient } from "../db"
 import { CarDataObject, CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin, UploadSource } from "../types"
 
 export class CarUploadService {
   constructor(
     private sheetClient: AccountSheetClient,
-    private dynamoCarClient: DynamoClient,
+    private dynamoCarClient: DynamoCarClient,
     private dynamoCategoryClient: DynamoCategoryClient,
     private dynamoUploadedCarClient: DynamoUploadedCarClient,
     private initializer: BrowserInitializer,
   ) {}
 
+  // uploadCars 빼고 전부 이동되어야 할 메소드
   static createCarObject(items: Record<string, AttributeValue>[]): CarDataObject[] {
     return items.map(item=>{
       return {

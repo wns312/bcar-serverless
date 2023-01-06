@@ -1,52 +1,36 @@
 import { existsSync } from "node:fs"
 import { mkdir, rm } from "fs/promises"
 import { envs } from "./configs"
-import { BrowserInitializer, CategoryCrawler, CategoryService, UploadedCarSyncService } from "./puppeteer"
-import { CarUploadService } from "./puppeteer"
-import { DynamoClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db/dynamo"
-import { AccountSheetClient } from "./sheet"
+import { BrowserInitializer, CategoryCrawler } from "./puppeteer"
+import { CarUploadService, CategoryService, UploadedCarSyncService } from "./services"
+import { AccountSheetClient, DynamoCarClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db"
+
+const {
+  BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
+  BCAR_ANSAN_CROSS_LOGIN_URL,
+  BCAR_CATEGORY_INDEX,
+  BCAR_CATEGORY_TABLE,
+  BCAR_INDEX,
+  BCAR_TABLE,
+  DYNAMO_DB_REGION,
+  GOOGLE_CLIENT_EMAIL,
+  GOOGLE_PRIVATE_KEY,
+  NODE_ENV,
+} = envs
+
+const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+const initializer = new BrowserInitializer(NODE_ENV)
+const crawler = new CategoryCrawler(initializer)
+const dynamoCarClient = new DynamoCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
+const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
+const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
 
 async function syncUpdatedCars() {
-  const {
-    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
-    BCAR_ANSAN_CROSS_LOGIN_URL,
-    BCAR_INDEX,
-    BCAR_TABLE,
-    DYNAMO_DB_REGION,
-    GOOGLE_CLIENT_EMAIL,
-    GOOGLE_PRIVATE_KEY,
-    NODE_ENV,
-  } = envs
-
-  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
-  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const initializer = new BrowserInitializer(NODE_ENV)
   const syncService = new UploadedCarSyncService(dynamoCarClient, dynamoUploadedCarClient, sheetClient, initializer)
   await syncService.execute()
 }
 
 async function testUpdateCars() {
-  const {
-    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
-    BCAR_ANSAN_CROSS_LOGIN_URL,
-    BCAR_CATEGORY_INDEX,
-    BCAR_CATEGORY_TABLE,
-    BCAR_INDEX,
-    BCAR_TABLE,
-    DYNAMO_DB_REGION,
-    GOOGLE_CLIENT_EMAIL,
-    GOOGLE_PRIVATE_KEY,
-    NODE_ENV,
-  } = envs
-
-  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
-  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-
-  const initializer = new BrowserInitializer(NODE_ENV)
-
   const carUploadService = new CarUploadService(
     sheetClient,
     dynamoCarClient,
@@ -76,24 +60,6 @@ async function testUpdateCars() {
 }
 
 async function updateCars() {
-  const {
-    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
-    BCAR_ANSAN_CROSS_LOGIN_URL,
-    BCAR_CATEGORY_INDEX,
-    BCAR_CATEGORY_TABLE,
-    BCAR_INDEX,
-    BCAR_TABLE,
-    DYNAMO_DB_REGION,
-    GOOGLE_CLIENT_EMAIL,
-    GOOGLE_PRIVATE_KEY,
-    NODE_ENV,
-  } = envs
-
-  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
-  const dynamoCarClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
-  const initializer = new BrowserInitializer(NODE_ENV)
   const carUploadService = new CarUploadService(
     sheetClient,
     dynamoCarClient,
@@ -122,22 +88,7 @@ async function updateCars() {
 
 
 async function crawlCategories() {
-  const {
-    BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
-    BCAR_ANSAN_CROSS_LOGIN_URL,
-    BCAR_CATEGORY_INDEX,
-    BCAR_CATEGORY_TABLE,
-    DYNAMO_DB_REGION,
-    GOOGLE_CLIENT_EMAIL,
-    GOOGLE_PRIVATE_KEY,
-    NODE_ENV,
-  } = envs
-
-  const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
-  const initializer = new BrowserInitializer(NODE_ENV)
-  const crawler = new CategoryCrawler(initializer)
-  const dynamoClient = new DynamoClient(DYNAMO_DB_REGION, BCAR_CATEGORY_TABLE, BCAR_CATEGORY_INDEX)
-  const categoryService = new CategoryService(sheetClient, crawler, dynamoClient)
+  const categoryService = new CategoryService(sheetClient, crawler, dynamoCategoryClient)
 
   try {
     await categoryService.collectCategoryInfo(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)

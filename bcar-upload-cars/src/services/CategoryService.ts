@@ -1,12 +1,11 @@
-import { CategoryCrawler } from "."
-import { DynamoClient } from "../db/dynamo/DynamoClient"
-import { AccountSheetClient } from "../sheet/index"
+import { CategoryCrawler } from "../puppeteer"
+import { AccountSheetClient, DynamoCategoryClient } from "../db"
 
 export class CategoryService {
   constructor(
     private sheetClient: AccountSheetClient,
     private categoryCrawler: CategoryCrawler,
-    private dynamoClient: DynamoClient,
+    private dynamoCategoryClient: DynamoCategoryClient,
   ) {}
 
 
@@ -18,10 +17,10 @@ export class CategoryService {
     const carManufacturerMap = this.categoryCrawler.carManufacturerMap
     const carSegmentMap = this.categoryCrawler.carSegmentMap
 
-    const carSegmentResult = await this.dynamoClient.saveCarSegment(carSegmentMap)
-    const carManufacturerResult = await this.dynamoClient.saveCarManufacturer(carManufacturerMap)
-    const carModelResult = await this.dynamoClient.saveCarModel(carManufacturerMap)
-    const carDetailResult = await this.dynamoClient.saveCarDetailModel(carManufacturerMap)
+    const carSegmentResult = await this.dynamoCategoryClient.saveCarSegment(carSegmentMap)
+    const carManufacturerResult = await this.dynamoCategoryClient.saveCarManufacturer(carManufacturerMap)
+    const carModelResult = await this.dynamoCategoryClient.saveCarModel(carManufacturerMap)
+    const carDetailResult = await this.dynamoCategoryClient.saveCarDetailModel(carManufacturerMap)
 
     carSegmentResult.forEach(r => console.log(r))
     carManufacturerResult.forEach(r => console.log(r))

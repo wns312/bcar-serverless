@@ -8,7 +8,7 @@ import {
   RegisterJobDefinitionCommand,
   ResourceType
 } from "@aws-sdk/client-batch";
-import { envs, deployEnvs } from "../../src/configs"
+import { envs, deployEnvs } from "../configs"
 
 const MINUTE = 60
 const {
