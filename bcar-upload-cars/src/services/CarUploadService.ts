@@ -231,7 +231,7 @@ export class CarUploadService {
       const succeededSourceIds = Array.from(sourceMapObj.succeededSourceMap.keys())
       for (const id of succeededSourceIds) {
         const sources = sourceMapObj.succeededSourceMap.get(id)
-        const responses = await this.dynamoUploadedCarClient.saveUpdatedCars(id, sources!)
+        const responses = await this.dynamoUploadedCarClient.batchSave(id, sources!)
         responses.forEach(r=>{
           console.log(r);
         })

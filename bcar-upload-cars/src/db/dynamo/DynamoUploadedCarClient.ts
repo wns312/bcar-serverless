@@ -2,11 +2,15 @@ import { AttributeValue } from "@aws-sdk/client-dynamodb";
 import { DynamoBaseClient } from "."
 import { ResponseError } from "../../errors"
 import { UploadSource } from "../../types"
+import { chunk } from "../../utils"
 
 export class DynamoUploadedCarClient {
   baseClient: DynamoBaseClient;
   tableName: string;
   indexName: string;
+
+  static userPrefix = "#USER-"
+  static carPrefix = "#CAR-"
 
   constructor(region: string, tableName: string, indexName: string) {
     this.baseClient = new DynamoBaseClient(region);
@@ -74,7 +78,7 @@ export class DynamoUploadedCarClient {
   //   }
   // }
 
-  async scanUpdatedCars(segmentSize: number) {
+  async segmentScan(segmentSize: number) {
     const promiseList: Promise<{items: Record<string, AttributeValue>[], count: number}>[] = []
     for (let segmentIndex = 0; segmentIndex  < segmentSize; segmentIndex++) {
       promiseList.push(this.segmentScanWithStartString('#USER', segmentIndex, segmentSize, '#CAR'))
@@ -86,17 +90,25 @@ export class DynamoUploadedCarClient {
       }, { items: [], count: 0})
   }
 
-  async saveUpdatedCars(id: string, updatedSources: UploadSource[]) {
+  batchSave(id: string, updatedSources: UploadSource[]) {
     const now = Date.now()
-    const putItems = updatedSources.map(s=>({
+    const putItems = updatedSources.map(({car: {carNumber}})=>({
       Item: {
-        PK: { S: `#USER-${id}` },
-        SK: { S: `#CAR-${s.car.carNumber}` },
+        PK: { S: DynamoUploadedCarClient.userPrefix + id },
+        SK: { S: DynamoUploadedCarClient.carPrefix + carNumber },
         registeredAt: { N: now.toString() },
       }
     }))
+    return this.baseClient.batchPutItems(this.tableName, ...putItems)
+  }
 
-    const results = await this.baseClient.batchPutItems(this.tableName, ...putItems)
-    return results
+  batchDelete(id: string, carNums: string[]) {
+    const deleteRequestInput = carNums.map(carNumber => ({
+      Key: {
+        PK: { S: DynamoUploadedCarClient.userPrefix + id },
+        SK: { S: DynamoUploadedCarClient.carPrefix + carNumber },
+      }
+    }))
+    return this.baseClient.batchDeleteItems(this.tableName, ...deleteRequestInput)
   }
 }

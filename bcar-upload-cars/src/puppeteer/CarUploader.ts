@@ -290,6 +290,9 @@ export class CarUploader {
     return CarUploader.getImageDir(id, carNumber) + imageName
   }
 
+  // 아래와 같은 파일명 처리해주어야 함
+  // https://file.kcrwork.com/car/t/2023/0108/63ba17b93f491.63ba17b93f497.jpg net::ERR_ABORTED
+  // url.split("_") 부분
   static async saveImage(imageDir: string, url: string): Promise<Base64Image> {
     const response = await fetch(url)
     if (response.status !== 200) {
@@ -314,6 +317,8 @@ export class CarUploader {
   async saveImages(imageDir: string, carImgList: string[]) {
     return carImgList.length ? Promise.all(carImgList.map(url=>CarUploader.saveImage(imageDir, url))) : []
   }
+
+
 
   async uploadImages(base64ImgList: Base64Image[]) {
     await this.page.evaluate(async (base64ImgList)=>{
@@ -467,7 +472,10 @@ export class CarUploader {
         succeededSources.push(source)
       } catch (error) {
         failedSources.push(source)
-
+        // 처리해야하는 에러. 종료되어야 한다. 또는 재시작 되어야 함
+        // 에러 이름: Error
+        // 에러 메시지: net::ERR_INTERNET_DISCONNECTED at https://car.ansankcr.co.kr/my/car_post/new?car_idx=&state=0
+        // 에러: Error: net::ERR_INTERNET_DISCONNECTED at https://car.ansankcr.co.kr/my/car_post/new?car_idx=&state=0
         if (
           error instanceof ProtocolError
           || !(error instanceof Error)
@@ -489,9 +497,6 @@ export class CarUploader {
         }
       }
     }
-    // 만약 dialog 이벤트 없이 팝업이 뜨게 된다먄 그대로 계속 기다리게 된다.
-    // 이후 타임아웃 에러가 발생하게 된다.
-    // 모두 완료가 되었으면 차량 정보에 대한 DB 갱신이 있어야 한다.
     // uploader는 성공한 차량과, 실패한 차량에 대한 모든 목록을 리턴해주어야 한다.
     // dialog에서도 이를 처리해 줄 수 있도록 하자.
     // 또는 인스턴스 변수로 성공목록과 실패목록을 저장해두면, catch해서 쓸 수 있게 된다.

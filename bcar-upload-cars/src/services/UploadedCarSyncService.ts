@@ -1,22 +1,24 @@
 // import { mkdir, rm } from "fs/promises"
 // import { AttributeValue } from "@aws-sdk/client-dynamodb"
-import { BrowserInitializer } from "../puppeteer"
-import { AccountSheetClient, DynamoCarClient, DynamoUploadedCarClient } from "../db"
+import { BrowserInitializer, CarSynchronizer } from "../puppeteer"
+import { AccountSheetClient, DynamoCarClient, DynamoUploadedCarClient, KCRURLSheetClient } from "../db"
 // import { CarDetailModel, CarModel, CarSegment, CarManufacturer, ManufacturerOrigin } from "../types"
-
+import { envs } from "../configs"
+import { Account, KCRURL } from "../types"
 export class UploadedCarSyncService {
 
   constructor(
     private dynamoCarClient: DynamoCarClient,
     private dynamoUploadedCarClient: DynamoUploadedCarClient,
     private accountSheetClient: AccountSheetClient,
+    private KCRSheetClient: KCRURLSheetClient,
     private initializer: BrowserInitializer,
   ) {}
 
   private async getExistingUpdatedCarMap() {
     const [carResults, updatedCarResults] = await Promise.all([
       this.dynamoCarClient.getAllCars(10),
-      this.dynamoUploadedCarClient.scanUpdatedCars(10)
+      this.dynamoUploadedCarClient.segmentScan(10)
     ])
 
     const carResultMap = carResults.items.reduce((map, item)=>
@@ -24,8 +26,10 @@ export class UploadedCarSyncService {
       new Map<string, string>()
     )
 
+    // 여기서 실제 존재하는 차량만 걸러진다.
+    // carResultMap에 있는 차량이라는 것은 유지되어야 할 차량이라는 것을 의미하기 때문.
     const updatedCarResultMap = updatedCarResults.items.reduce((map, item)=>
-      carResultMap.get(item.SK.S!) ? map.set(item.SK.S!, item.PK.S!) : map,
+      carResultMap.get(item.SK.S!) ? map.set(item.SK.S!.replace("#CAR-", ""), item.PK.S!) : map,
       new Map<string, string>()
     )
 
@@ -36,19 +40,50 @@ export class UploadedCarSyncService {
     }, new Map<string, string[]>())
   }
 
+  private filterUsers(existingCarMap: Map<string, string[]>, allUsers: Account[]) {
+    const userIds = Array.from(existingCarMap.keys())
+    return allUsers.filter(user=>userIds.includes(user.id))
+  }
+  // loginUrl이랑 regitsterUrl도 인자로 받을 것이 아니라 스프레드 시트를 뒤져서 찾아내는 것이 맞다.
   async execute() {
-    const [userCarMap, users] = await Promise.all([
+
+    const [existingCarMap, allUsers, allURL] = await Promise.all([
       this.getExistingUpdatedCarMap(),
       this.accountSheetClient.getAccounts(),
+      this.KCRSheetClient.getAll(),
     ])
-    const userIds = Array.from(userCarMap.keys())
-    const filteredUsers = users.filter(user=>userIds.includes(user.id))
-    console.log(userIds);
+
+    const urlMap = new Map<string, KCRURL>(
+      allURL.map(obj=>[obj.region, obj])
+    )
+
+    const filteredUsers = this.filterUsers(existingCarMap, allUsers)
+    console.log(existingCarMap);
     console.log(filteredUsers);
-    // 0. CarSynchronizer 클래스 새로 생성하고 의존성 주입할 것
-    // 1. 해당 id 목록으로 각 id에 로그인
-    // 2. 차량 목록 페이지로 갈 것
-    // 3. 차량 목록에 해당하지 않는 차량을 확인하고 삭제할 것 (아마도 뒷 페이지부터 작업하는게 편리할 것)
-    // 4. update목록에서 삭제된 목록을 updatedCars 목록에서 제거할 것
+
+    await this.initializer.initializeBrowsers(filteredUsers.length)
+    const page = this.initializer.pageList[0]
+    await this.initializer.activateEvents(page)
+    await page.on("dialog", async (dialog)=>{
+      await dialog.accept()
+    })
+
+    const deletedCarNumsPromises = filteredUsers.map(async ({id, pw, region})=> {
+      const kcrUrl = urlMap.get(region)
+      if (!kcrUrl) throw new Error("No KCR URL")
+      const { loginUrl, manageUrl } = kcrUrl
+
+      await this.initializer.login(page, loginUrl + manageUrl, id, pw)
+      const existingCars = existingCarMap.get(id)!
+
+      const synchronizer = new CarSynchronizer(page, manageUrl, existingCars)
+      const deletedCarNums = await synchronizer.sync()
+      if (!deletedCarNums.length) return
+
+      this.dynamoUploadedCarClient.batchDelete(id, deletedCarNums)
+    })
+
+    await Promise.all(deletedCarNumsPromises)
+    await this.initializer.closePages()
   }
 }

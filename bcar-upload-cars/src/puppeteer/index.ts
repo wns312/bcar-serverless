@@ -1,4 +1,5 @@
 export * from "./BrowserInitializer"
 export * from "./CarClassifier"
+export * from "./CarSynchronizer"
 export * from "./CarUploader"
 export * from "./CategoryCrawler"

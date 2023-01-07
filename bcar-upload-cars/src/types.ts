@@ -10,10 +10,17 @@ export type RangeChunk = {
 export type Account = {
   id: string
   pw: string
+  region: string
   isTestAccount: boolean
   isErrorOccured: boolean
   logStreamUrl: string | null
   errorContent: string | null
+}
+export type KCRURL = {
+  region: string
+  loginUrl: string
+  registerUrl: string
+  manageUrl: string
 }
 
 export type CarCategory = Map<string, CarManufacturer>

@@ -3,7 +3,7 @@ import { mkdir, rm } from "fs/promises"
 import { envs } from "./configs"
 import { BrowserInitializer, CategoryCrawler } from "./puppeteer"
 import { CarUploadService, CategoryService, UploadedCarSyncService } from "./services"
-import { AccountSheetClient, DynamoCarClient, DynamoCategoryClient, DynamoUploadedCarClient } from "./db"
+import { AccountSheetClient, DynamoCarClient, DynamoCategoryClient, DynamoUploadedCarClient, KCRURLSheetClient } from "./db"
 
 const {
   BCAR_ANSAN_CROSS_CAR_REGISTER_URL,
@@ -18,7 +18,8 @@ const {
   NODE_ENV,
 } = envs
 
-const sheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+const accountSheetClient = new AccountSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
+const KCRsheetClient = new KCRURLSheetClient(GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY)
 const initializer = new BrowserInitializer(NODE_ENV)
 const crawler = new CategoryCrawler(initializer)
 const dynamoCarClient = new DynamoCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
@@ -26,13 +27,19 @@ const dynamoCategoryClient = new DynamoCategoryClient(DYNAMO_DB_REGION, BCAR_CAT
 const dynamoUploadedCarClient = new DynamoUploadedCarClient(DYNAMO_DB_REGION, BCAR_TABLE, BCAR_INDEX)
 
 async function syncUpdatedCars() {
-  const syncService = new UploadedCarSyncService(dynamoCarClient, dynamoUploadedCarClient, sheetClient, initializer)
+  const syncService = new UploadedCarSyncService(
+    dynamoCarClient,
+    dynamoUploadedCarClient,
+    accountSheetClient,
+    KCRsheetClient,
+    initializer
+  )
   await syncService.execute()
 }
 
 async function testUpdateCars() {
   const carUploadService = new CarUploadService(
-    sheetClient,
+    accountSheetClient,
     dynamoCarClient,
     dynamoCategoryClient,
     dynamoUploadedCarClient,
@@ -61,7 +68,7 @@ async function testUpdateCars() {
 
 async function updateCars() {
   const carUploadService = new CarUploadService(
-    sheetClient,
+    accountSheetClient,
     dynamoCarClient,
     dynamoCategoryClient,
     dynamoUploadedCarClient,
@@ -88,7 +95,7 @@ async function updateCars() {
 
 
 async function crawlCategories() {
-  const categoryService = new CategoryService(sheetClient, crawler, dynamoCategoryClient)
+  const categoryService = new CategoryService(accountSheetClient, crawler, dynamoCategoryClient)
 
   try {
     await categoryService.collectCategoryInfo(BCAR_ANSAN_CROSS_LOGIN_URL, BCAR_ANSAN_CROSS_CAR_REGISTER_URL)

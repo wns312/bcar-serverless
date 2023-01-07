@@ -4,6 +4,7 @@ import {
   BatchWriteItemCommandInput,
   DeleteItemCommand,
   DeleteItemCommandInput,
+  DeleteRequest,
   DescribeTableCommand,
   DynamoDBClient,
   ExecuteStatementCommand,
@@ -55,19 +56,26 @@ export class DynamoBaseClient {
   }
 
   async batchPutItems(tableName: string, ...putRequestInputs: PutRequest[]) {
-    const input = putRequestInputs.map(input=> {
-      return { PutRequest: input }
-    })
-    const createRequestInputChunks = chunk(input, 25);
-
-    const promiseResponses = createRequestInputChunks.map(putRequests => {
+    const input = putRequestInputs.map(input=>({ PutRequest: input }))
+    const responses = chunk(input, 25).map(putRequests => {
       return this.batchWriteItem({
         RequestItems: {
           [tableName]: putRequests
         }
       });
     })
+    return Promise.all(responses)
+  }
 
-    return Promise.all(promiseResponses)
+  async batchDeleteItems(tableName: string, ...deleteRequestInputs: DeleteRequest[]) {
+    const input = deleteRequestInputs.map(input=>({ DeleteRequest: input }))
+    const responses = chunk(input, 25).map(putRequests => {
+      return this.batchWriteItem({
+        RequestItems: {
+          [tableName]: putRequests
+        }
+      });
+    })
+    return Promise.all(responses)
   }
 }
